@@ -127,7 +127,15 @@ func run() error {
 			}
 
 		case takeTurn.EventTypeThinking:
-			fmt.Print(ThoughtStyle.Render(strings.TrimRight(evt.Thinking, "\n")))
+			// Trim all trailing whitespace from each line to prevent gaps
+			lines := strings.Split(evt.Thinking, "\n")
+			for i, line := range lines {
+				lines[i] = strings.TrimRight(line, " \t")
+			}
+			thinking := strings.TrimRight(strings.Join(lines, "\n"), "\r\n")
+			if thinking != "" {
+				fmt.Print(ThoughtStyle.Render(thinking))
+			}
 
 		case takeTurn.EventTypeToolCall:
 			toolCallName = evt.ToolCall.ToolUseName
