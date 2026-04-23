@@ -256,11 +256,66 @@ func formatReadOutput(output string, width int) {
 		}
 	}
 
-	// Render as table
-	for _, pl := range parsedLines {
-		lineStr := fmt.Sprintf("%*d  %s", maxNumWidth, pl.num, pl.content)
-		RenderLine(" "+lineStr+" ", width)
+	// Calculate max content width (leave 2 spaces for padding on each side)
+	// Line format: " {line}  {content} "
+	// So content max width = width - maxNumWidth - 4
+	contentMaxWidth := width - maxNumWidth - 4
+	if contentMaxWidth < 10 {
+		contentMaxWidth = 10 // minimum content width
 	}
+
+	// Render as table, wrapping long content within the content column
+	for _, pl := range parsedLines {
+		// Wrap content to fit within contentMaxWidth
+		wrappedLines := wrapText(pl.content, contentMaxWidth)
+		for i, content := range wrappedLines {
+			var lineStr string
+			if i == 0 {
+				// First line: include line number
+				lineStr = fmt.Sprintf("%*d  %s", maxNumWidth, pl.num, content)
+			} else {
+				// Wrapped lines: indent to align with content
+				indent := strings.Repeat(" ", maxNumWidth+2)
+				lineStr = indent + content
+			}
+			RenderLine(" "+lineStr+" ", width)
+		}
+	}
+}
+
+// wrapText wraps text to fit within maxWidth, breaking on whitespace.
+func wrapText(text string, maxWidth int) []string {
+	if maxWidth < 1 {
+		return []string{text}
+	}
+	if len(text) <= maxWidth {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	currentLine := ""
+
+	for _, word := range words {
+		if currentLine == "" {
+			currentLine = word
+		} else if len(currentLine)+1+len(word) <= maxWidth {
+			currentLine += " " + word
+		} else {
+			if currentLine != "" {
+				lines = append(lines, currentLine)
+			}
+			currentLine = word
+		}
+	}
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
 }
 
 // formatWriteOutput shows write_file operations in detail.

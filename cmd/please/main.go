@@ -137,12 +137,11 @@ func run() error {
 
 		case takeTurn.EventTypeToolResult:
 			// Render the complete styled block
-			resultContent := strings.TrimSpace(bufferedOutput.String())
 			fmt.Fprintf(os.Stderr, "\n")
 			if evt.ToolResult.ToolResultError {
-				render.RenderToolError(toolCallName, toolCallInput, resultContent, evt.ToolResult.ToolResultContent)
+				render.RenderToolError(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, evt.ToolResult.ToolResultContent)
 			} else {
-				render.RenderToolCall(toolCallName, toolCallInput, resultContent, evt.ToolResult.ToolResultContent)
+				render.RenderToolCall(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, formatResultSummary(toolCallName, evt.ToolResult.ToolResultContent))
 			}
 			bufferedOutput.Reset()
 			buffering = false
@@ -234,6 +233,24 @@ func loadSession(path string) ([]llm.Message, error) {
 		messages = append(messages, msg)
 	}
 	return messages, scanner.Err()
+}
+
+// formatResultSummary creates a human-readable summary of tool results.
+func formatResultSummary(name, content string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	switch name {
+	case "read":
+		// Count non-empty lines
+		count := 0
+		for _, line := range lines {
+			if line != "" {
+				count++
+			}
+		}
+		return fmt.Sprintf("→ %d lines", count)
+	default:
+		return "→ done"
+	}
 }
 
 // appendSession appends messages to the session file.
