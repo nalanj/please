@@ -29,7 +29,7 @@ tasks:
   run:
     desc: Run please CLI
     cmds:
-      - go run ./cmd/please
+      - go run ./cmd/please {{.CLI_ARGS}}
 
   ui:
     desc: Run UI demo

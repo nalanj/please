@@ -13,6 +13,9 @@ const (
 	// EventTypeText is emitted for each incremental text delta from the model.
 	EventTypeText EventType = "text"
 
+	// EventTypeThinking is emitted for extended thinking/thinking chunks from the model.
+	EventTypeThinking EventType = "thinking"
+
 	// EventTypeToolCall is emitted when the model requests a tool invocation.
 	// The agent executes the tool before continuing.
 	EventTypeToolCall EventType = "tool_call"
@@ -39,6 +42,9 @@ type Event struct {
 
 	// Incremental text from the model (EventTypeText).
 	Text string
+
+	// Thinking text from extended thinking (EventTypeThinking).
+	Thinking string
 
 	// Tool call requested by the model (EventTypeToolCall).
 	// Type is always llm.ContentTypeToolUse.

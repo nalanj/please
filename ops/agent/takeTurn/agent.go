@@ -190,6 +190,11 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- chanItem) {
 					_ = llmStream.Close()
 					return
 				}
+			case llm.StreamEventTypeThinking:
+				if !send(chanItem{event: Event{Type: EventTypeThinking, Thinking: evt.Thinking}}) {
+					_ = llmStream.Close()
+					return
+				}
 			case llm.StreamEventTypeToolUse:
 				if !send(chanItem{event: Event{Type: EventTypeToolCall, ToolCall: evt.ToolUse}}) {
 					_ = llmStream.Close()

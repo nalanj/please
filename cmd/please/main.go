@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/nalanj/please/ui/render"
 	"github.com/google/uuid"
 
@@ -27,6 +28,9 @@ const (
 	sessionsDir       = "sessions"
 	currentSessionSym = "current-session"
 )
+
+// ThoughtStyle for rendering thought/thinking output
+var ThoughtStyle = lipgloss.NewStyle().Italic(true)
 
 func main() {
 	if err := run(); err != nil {
@@ -121,6 +125,9 @@ func run() error {
 			} else {
 				fmt.Print(evt.Text)
 			}
+
+		case takeTurn.EventTypeThinking:
+			fmt.Print(ThoughtStyle.Render(evt.Thinking))
 
 		case takeTurn.EventTypeToolCall:
 			toolCallName = evt.ToolCall.ToolUseName
