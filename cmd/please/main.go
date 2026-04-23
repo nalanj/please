@@ -127,7 +127,7 @@ func run() error {
 			}
 
 		case takeTurn.EventTypeThinking:
-			fmt.Print(ThoughtStyle.Render(evt.Thinking))
+			fmt.Print(ThoughtStyle.Render(strings.TrimRight(evt.Thinking, "\n")))
 
 		case takeTurn.EventTypeToolCall:
 			toolCallName = evt.ToolCall.ToolUseName
