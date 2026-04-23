@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Built binaries
+bin/
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -23,6 +26,9 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
+
+# .please directory (session state)
+.please/
 
 # env file
 .env

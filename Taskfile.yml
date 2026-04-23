@@ -1,0 +1,43 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Run please
+    cmds:
+      - go run ./cmd/please {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{.CLI_ARGS}}'
+
+  build:
+    desc: Build the please binary to bin/please
+    cmd: go build -o bin/please ./cmd/please
+
+  install:
+    desc: Install the please binary to ~/.local/bin/please
+    cmds:
+      - go build -o ~/.local/bin/please ./cmd/please
+
+  test:
+    desc: Run all tests
+    cmd: go test ./...
+
+  lint:
+    desc: Run golangci-lint (installs if missing)
+    vars:
+      GOLANGCI_VERSION: v2.11.1
+    cmds:
+      - |
+        if ! command -v golangci-lint &>/dev/null || \
+           ! golangci-lint --version 2>&1 | grep -q "version 2\."; then
+          echo "Installing golangci-lint {{.GOLANGCI_VERSION}}..."
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "{{.GOLANGCI_VERSION}}"
+        fi
+        golangci-lint run ./...
+
+  clean:
+    desc: Remove build artifacts and .please directory
+    cmds:
+      - rm -rf bin/
+      - rm -rf .please/
+      - echo "Cleaned"
