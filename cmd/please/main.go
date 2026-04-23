@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nalanj/please/ui/render"
 	"github.com/google/uuid"
 
 	"github.com/nalanj/please/ops/agent/takeTurn"
@@ -95,28 +96,56 @@ func run() error {
 	stream := agent.Run(ctx, message)
 	defer stream.Close()
 
+	// Buffer for building styled tool blocks
+	var (
+		toolCallName   string
+		toolCallInput string
+		buffering      bool
+		bufferedOutput strings.Builder
+	)
+
+	flushBuffer := func() {
+		if buffering {
+			fmt.Fprintf(os.Stderr, "%s", bufferedOutput.String())
+			bufferedOutput.Reset()
+			buffering = false
+		}
+	}
+
 	for stream.Next() {
 		evt := stream.Event()
 		switch evt.Type {
 		case takeTurn.EventTypeText:
-			fmt.Print(evt.Text)
-
-		case takeTurn.EventTypeToolCall:
-			fmt.Fprintf(os.Stderr, "\n[calling %s]\n", evt.ToolCall.ToolUseName)
-
-		case takeTurn.EventTypeToolResult:
-			if evt.ToolResult.ToolResultError {
-				fmt.Fprintf(os.Stderr, "[%s error: %s]\n",
-					evt.ToolResult.ToolResultID, evt.ToolResult.ToolResultContent)
+			if buffering {
+				bufferedOutput.WriteString(evt.Text)
 			} else {
-				fmt.Fprintf(os.Stderr, "[%s → %s]\n",
-					evt.ToolResult.ToolResultID, evt.ToolResult.ToolResultContent)
+				fmt.Print(evt.Text)
 			}
 
+		case takeTurn.EventTypeToolCall:
+			toolCallName = evt.ToolCall.ToolUseName
+			toolCallInput = string(evt.ToolCall.ToolUseInput)
+			buffering = true
+			bufferedOutput.Reset()
+
+		case takeTurn.EventTypeToolResult:
+			// Render the complete styled block
+			resultContent := strings.TrimSpace(bufferedOutput.String())
+			fmt.Fprintf(os.Stderr, "\n")
+			if evt.ToolResult.ToolResultError {
+				render.RenderToolError(toolCallName, toolCallInput, resultContent, evt.ToolResult.ToolResultContent)
+			} else {
+				render.RenderToolCall(toolCallName, toolCallInput, resultContent, evt.ToolResult.ToolResultContent)
+			}
+			bufferedOutput.Reset()
+			buffering = false
+
 		case takeTurn.EventTypeDone:
+			flushBuffer()
 			fmt.Println()
 		}
 	}
+	flushBuffer()
 	if err := stream.Err(); err != nil {
 		return fmt.Errorf("agent: %w", err)
 	}
