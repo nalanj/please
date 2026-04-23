@@ -14,7 +14,7 @@ tasks:
   install:
     desc: Build and install the please binary
     cmds:
-      - go install
+      - go install ./cmd/please
 
   lint:
     desc: Run linters
