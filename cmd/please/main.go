@@ -127,10 +127,17 @@ func run() error {
 			}
 
 		case takeTurn.EventTypeThinking:
-			// Trim all trailing whitespace from each line to prevent gaps
+			// Collapse mid-line excessive whitespace (3+ spaces) that causes visual gaps
+			// but preserve meaningful spacing
 			lines := strings.Split(evt.Thinking, "\n")
 			for i, line := range lines {
-				lines[i] = strings.TrimRight(line, " \t")
+				// Trim trailing first
+				line = strings.TrimRight(line, " \t")
+				// Collapse 3+ spaces to single space (formatting artifacts)
+				for strings.Contains(line, "   ") {
+					line = strings.Replace(line, "   ", " ", -1)
+				}
+				lines[i] = line
 			}
 			thinking := strings.TrimRight(strings.Join(lines, "\n"), "\r\n")
 			if thinking != "" {
