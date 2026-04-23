@@ -137,11 +137,9 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (*llm.Stream, erro
 						ToolUse: block,
 					}, true, nil
 				case "thinking":
-					// Emit the complete thinking block when done.
-					return llm.StreamEvent{
-						Type:     llm.StreamEventTypeThinking,
-						Thinking: br.thinking.String(),
-					}, true, nil
+					// Don't re-emit - thinking was already streamed via thinking_delta
+					// Return empty event with true to continue iteration
+					return llm.StreamEvent{}, true, nil
 				}
 
 			case "message_delta":
