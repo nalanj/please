@@ -58,7 +58,21 @@ func run() error {
 		return fmt.Errorf("session: %w", err)
 	}
 
+	// Handle --help flag
+	if len(os.Args) >= 2 && os.Args[1] == "--help" {
+		fmt.Println("Usage: please <message>")
+		fmt.Println("       please --help")
+		fmt.Println()
+		fmt.Println("A turn-based agent CLI. Provide a message to continue the current")
+		fmt.Println("session or start a new one.")
+		return nil
+	}
+
 	// Message from args
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "usage: please <message>\n")
+		return fmt.Errorf("no message provided")
+	}
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "usage: please <message>\n")
 		return fmt.Errorf("no message provided")
