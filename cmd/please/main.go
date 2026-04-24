@@ -52,16 +52,25 @@ func run() error {
 		return fmt.Errorf("creating .please directory: %w", err)
 	}
 
-	// Load existing session if one is active
-	sessionPath, err := loadOrCreateSession()
-	if err != nil {
-		return fmt.Errorf("session: %w", err)
+	// Check for --new flag first
+	newSession := false
+	args := os.Args[1:]
+	for i, arg := range args {
+		if arg == "--new" {
+			newSession = true
+			args = append(args[:i], args[i+1:]...)
+			break
+		}
 	}
 
 	// Handle --help flag
-	if len(os.Args) >= 2 && os.Args[1] == "--help" {
-		fmt.Println("Usage: please <message>")
+	if len(args) >= 1 && args[0] == "--help" {
+		fmt.Println("Usage: please [options] <message>")
 		fmt.Println("       please --help")
+		fmt.Println("       please --new <message>")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --new    Start a new session instead of continuing the current one.")
 		fmt.Println()
 		fmt.Println("A turn-based agent CLI. Provide a message to continue the current")
 		fmt.Println("session or start a new one.")
@@ -69,17 +78,25 @@ func run() error {
 	}
 
 	// Message from args
-	if len(os.Args) < 2 {
+	if len(args) < 1 {
 		fmt.Fprintf(os.Stderr, "usage: please <message>\n")
 		return fmt.Errorf("no message provided")
 	}
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: please <message>\n")
-		return fmt.Errorf("no message provided")
-	}
-	message := strings.Join(os.Args[1:], " ")
+	message := strings.Join(args, " ")
 	if message == "" {
 		return fmt.Errorf("no message provided")
+	}
+
+	// Load existing session or create new one
+	var sessionPath string
+	var err error
+	if newSession {
+		sessionPath, err = createNewSession()
+	} else {
+		sessionPath, err = loadOrCreateSession()
+	}
+	if err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
 
 	// Build provider
@@ -215,6 +232,18 @@ func run() error {
 	return nil
 }
 
+// createNewSession creates a new session, replacing any existing current session.
+func createNewSession() (string, error) {
+	symlinkPath := filepath.Join(dotPleaseDir, currentSessionSym)
+
+	// Remove existing symlink
+	if err := os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+
+	return newSession(symlinkPath)
+}
+
 // loadOrCreateSession returns the path to the current session, creating a new one
 // if no session is active.
 func loadOrCreateSession() (string, error) {
@@ -229,10 +258,13 @@ func loadOrCreateSession() (string, error) {
 		}
 	}
 
-	// No active session, create a new one
-	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	return newSession(symlinkPath)
+}
+
+// newSession creates a new session file and updates the symlink.
+func newSession(symlinkPath string) (string, error) {
 	sessionID := uuid.New().String()[:8]
-	sessionFilename := fmt.Sprintf("%s_%s.jsonl", timestamp, sessionID)
+	sessionFilename := fmt.Sprintf("%s.jsonl", sessionID)
 	sessionPath := filepath.Join(dotPleaseDir, sessionsDir, sessionFilename)
 
 	// Create empty session file
@@ -245,9 +277,6 @@ func loadOrCreateSession() (string, error) {
 	}
 
 	// Create symlink to current session
-	if err := os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
-		return "", err
-	}
 	if err := os.Symlink(sessionPath, symlinkPath); err != nil {
 		return "", err
 	}
@@ -328,7 +357,7 @@ func providerName() string {
 	return "MiniMax"
 }
 
-// sessionID extracts the session ID from a session file path.
+// sessionID extracts the session ID (uuid prefix) from a session file path.
 func sessionID(path string) string {
 	base := filepath.Base(path)
 	if idx := strings.Index(base, ".jsonl"); idx != -1 {

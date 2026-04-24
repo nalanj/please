@@ -9,6 +9,10 @@ with the agent.
 please "Update the readme to describe all of the features"
 ```
 
+### Options
+
+- `--new` - Start a new session instead of continuing the current one.
+
 ### System Prompt
 
 Create a `SYSTEM.md` file in the project root to customize the agent's behavior.
@@ -53,8 +57,8 @@ occurs. Supported operations:
 `please` maintains the state for the project in a folder called `.please`. Be sure
 to add it to your `.gitignore` file.
 
-Each new session is managed in `.please/sessions/` as a timestamp based file as
-to when it was created. A symlink is placed in `.please/current-session` to
+Each new session is managed in `.please/sessions/` with a uuid-based filename
+(e.g. `abc12345.jsonl`). A symlink is placed in `.please/current-session` to
 reference the currently active session. If no session is active when run, a new
 session is created.
 
