@@ -139,13 +139,47 @@ func hasPendingMarker(text string) bool {
 		}
 	}
 
+	// Ordered list items need the same check
+	if isOrderedList(trimmed) {
+		if !strings.Contains(text, "\n") {
+			return true
+		}
+	}
+
 	return false
 }
+
 
 // isInsideCodeBlock checks if we're inside an open code block.
 func isInsideCodeBlock(text string) bool {
 	return strings.Count(text, "```")%2 != 0
 }
+
+// isOrderedList checks if text starts with an ordered list item pattern (e.g., "1.", "2.", "10.").
+func isOrderedList(text string) bool {
+	trimmed := strings.TrimLeft(text, " \t")
+	if trimmed == "" {
+		return false
+	}
+
+	// Check for numbered list pattern: digits followed by ". "
+	digits := 0
+	for i := 0; i < len(trimmed) && i < 10; i++ {
+		if trimmed[i] >= '0' && trimmed[i] <= '9' {
+			digits++
+		} else {
+			break
+		}
+	}
+
+	if digits == 0 {
+		return false
+	}
+
+	afterDigits := trimmed[digits:]
+	return strings.HasPrefix(afterDigits, ". ")
+}
+
 
 // isInsideCodeBlockAt checks if position in original text is inside a code block.
 func isInsideCodeBlockAt(original string, pos int) bool {
@@ -292,6 +326,24 @@ func processMarkdown(text string) (before, styled, after string) {
 		}
 		return "", styled, ""
 	}
+	// Ordered list items (1. 2. 10. etc.)
+	if !isInsideCodeBlock(text) && isOrderedList(trimmed) {
+		end := strings.Index(trimmed, "\n")
+		if end < 0 {
+			return "", "", text
+		}
+		listText := trimmed[:end]
+		if prefixLen > 0 {
+			listText = text[:prefixLen] + listText
+		}
+		styled = ansiList + listText + "\n" + ansiReset
+		afterStart := end + prefixLen + 1
+		if afterStart < len(text) {
+			return "", styled, text[afterStart:]
+		}
+		return "", styled, ""
+	}
+
 
 	return "", "", text
 }

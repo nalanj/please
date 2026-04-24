@@ -105,6 +105,32 @@ func TestList(t *testing.T) {
 		})
 	}
 }
+func TestOrderedList(t *testing.T) {
+	r := New()
+
+	tests := []struct {
+		name     string
+		input    string
+		wantPart string
+	}{
+		{"Complete ordered list", "1. item 1\n", "1. item 1"},
+		{"Incomplete ordered list", "1. item", ""},
+		{"Multi-digit number", "10. item 10\n", "10. item 10"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := r.Write(tt.input)
+			if tt.wantPart != "" && !strings.Contains(got, tt.wantPart) {
+				t.Errorf("got %q, want to contain %q", got, tt.wantPart)
+			}
+			if tt.wantPart == "" && got != "" {
+				t.Errorf("got %q, want empty", got)
+			}
+		})
+	}
+}
+
 
 func TestFlush(t *testing.T) {
 	r := New()
