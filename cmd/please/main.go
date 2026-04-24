@@ -1,4 +1,3 @@
-// Package main provides the please CLI.
 package main
 
 import (
@@ -23,12 +22,12 @@ import (
 )
 
 const (
-	defaultModel         = "minimax-m2.7"
-	systemFile           = "SYSTEM.md"
-	dotPleaseDir         = ".please"
-	sessionsDir          = "sessions"
-	currentSessionSym    = "current-session"
-	defaultContextLimit  = 200000
+	defaultModel        = "minimax-m2.7"
+	systemFile          = "SYSTEM.md"
+	dotPleaseDir        = ".please"
+	sessionsDir         = "sessions"
+	currentSessionSym   = "current-session"
+	defaultContextLimit = 200000
 )
 
 // ThoughtStyle for rendering thought/thinking output
@@ -53,15 +52,29 @@ func run() error {
 		return fmt.Errorf("creating .please directory: %w", err)
 	}
 
-	// Check for --new flag first
+	// Check for --new and --one-off flags
 	newSession := false
+	oneOff := false
 	args := os.Args[1:]
-	for i, arg := range args {
+	for _, arg := range args {
 		if arg == "--new" {
 			newSession = true
-			args = append(args[:i], args[i+1:]...)
-			break
+		} else if arg == "--one-off" {
+			oneOff = true
 		}
+	}
+	// Remove flags from args
+	var filtered []string
+	for _, arg := range args {
+		if arg != "--new" && arg != "--one-off" {
+			filtered = append(filtered, arg)
+		}
+	}
+	args = filtered
+
+	// Check for conflicting flags
+	if newSession && oneOff {
+		return fmt.Errorf("--new and --one-off cannot be used together")
 	}
 
 	// Handle --help flag
@@ -69,9 +82,11 @@ func run() error {
 		fmt.Println("Usage: please [options] <message>")
 		fmt.Println("       please --help")
 		fmt.Println("       please --new <message>")
+		fmt.Println("       please --one-off <message>")
 		fmt.Println()
 		fmt.Println("Options:")
-		fmt.Println("  --new    Start a new session instead of continuing the current one.")
+		fmt.Println("  --new       Start a new session instead of continuing the current one.")
+		fmt.Println("  --one-off   Take a turn without updating the current session symlink.")
 		fmt.Println()
 		fmt.Println("A turn-based agent CLI. Provide a message to continue the current")
 		fmt.Println("session or start a new one.")
@@ -93,6 +108,8 @@ func run() error {
 	var err error
 	if newSession {
 		sessionPath, err = createNewSession()
+	} else if oneOff {
+		sessionPath, err = createOneOffSession()
 	} else {
 		sessionPath, err = loadOrCreateSession()
 	}
@@ -244,6 +261,37 @@ func createNewSession() (string, error) {
 	}
 
 	return newSession(symlinkPath)
+}
+
+// createOneOffSession creates a session for one-off mode without updating the symlink.
+func createOneOffSession() (string, error) {
+	symlinkPath := filepath.Join(dotPleaseDir, currentSessionSym)
+
+	// Check if current-session symlink exists and is valid
+	if info, err := os.Lstat(symlinkPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if target, err := os.Readlink(symlinkPath); err == nil {
+			if _, err := os.Stat(target); err == nil {
+				return target, nil
+			}
+		}
+	}
+
+	// No active session, create a disposable one without updating symlink
+	// Use a uuid-based filename
+	sessionID := uuid.New().String()[:8]
+	sessionFilename := fmt.Sprintf("%s.jsonl", sessionID)
+	sessionPath := filepath.Join(dotPleaseDir, sessionsDir, sessionFilename)
+
+	// Create empty session file
+	f, err := os.Create(sessionPath)
+	if err != nil {
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+
+	return sessionPath, nil
 }
 
 // loadOrCreateSession returns the path to the current session, creating a new one
