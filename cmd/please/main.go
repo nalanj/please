@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -155,14 +158,33 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Set up signal handling for Ctrl-c (SIGINT = immediate stop) and Ctrl-\ (SIGQUIT = graceful stop)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGQUIT)
+
+	var shutdownReason string
+	var shutdownOnce sync.Once
+	handleSignal := func() {
+		sig := <-signalCh
+		shutdownOnce.Do(func() {
+			if sig == syscall.SIGINT {
+				shutdownReason = "Ctrl-c"
+			} else {
+				shutdownReason = "Ctrl-\\"
+			}
+			cancel()
+		})
+	}
+	go handleSignal()
+
 	stream := agent.Run(ctx, message)
 	defer stream.Close()
 
 	// Decoupled rendering: receive events fast, render gradually
 	type outputChunk struct {
-		kind     string
-		content  string
-		toolName string
+		kind      string
+		content   string
+		toolName  string
 		toolInput string
 		toolError bool
 	}
@@ -261,36 +283,100 @@ func run() error {
 
 	var toolCallName, toolCallInput string
 
-	for stream.Next() {
-		evt := stream.Event()
-		switch evt.Type {
-		case takeTurn.EventTypeText:
-			renderCh <- outputChunk{kind: "text", content: evt.Text}
+	// Read events in a goroutine and send to channel
+	eventCh := make(chan takeTurn.Event, 50)
+	var streamErr error
+	var streamWg sync.WaitGroup
 
-		case takeTurn.EventTypeThinking:
-			renderCh <- outputChunk{kind: "thinking", content: evt.Thinking}
+	streamWg.Add(1)
+	go func() {
+		defer streamWg.Done()
+		defer close(eventCh)
+		for stream.Next() {
+			eventCh <- stream.Event()
+		}
+		streamErr = stream.Err()
+	}()
 
-		case takeTurn.EventTypeToolCall:
-			toolCallName = evt.ToolCall.ToolUseName
-			toolCallInput = string(evt.ToolCall.ToolUseInput)
-			renderCh <- outputChunk{kind: "tool_start", toolName: toolCallName, toolInput: toolCallInput}
-
-		case takeTurn.EventTypeToolResult:
-			renderCh <- outputChunk{kind: "tool_result", toolName: toolCallName, toolInput: toolCallInput, content: evt.ToolResult.ToolResultContent, toolError: evt.ToolResult.ToolResultError}
-
-		case takeTurn.EventTypeDone:
-			renderCh <- outputChunk{kind: "flush"}
+	// Process events with context cancellation check
+	var done bool
+	for !done {
+		select {
+		case <-ctx.Done():
+			// Context cancelled - user hit Ctrl-c or Ctrl-\
+			stream.Close()
 			close(renderCh)
+			streamWg.Wait()
+			bufio.NewWriter(os.Stdout).Flush()
+
+			// Check if this was graceful shutdown (Ctrl-\)
+			if shutdownReason == "Ctrl-\\" {
+				// Save partial results before exiting
+				newMessages := agent.Messages()[prevCount:]
+				if err := appendSession(sessionPath, newMessages); err == nil {
+					duration := time.Since(startTime)
+					messages := agent.Messages()
+					totalTokens := estimateTokens(messages)
+					contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
+					fmt.Fprintf(os.Stderr, "\n%s\n",
+						InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs (saved)",
+							defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
+					return nil
+				}
+			}
+
+			if shutdownReason == "" {
+				shutdownReason = "interrupted"
+			}
+			fmt.Fprintf(os.Stderr, "\n%s\n", InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), shutdownReason)))
+			return nil
+
+		case evt, ok := <-eventCh:
+			if !ok {
+				done = true
+				break
+			}
+			switch evt.Type {
+			case takeTurn.EventTypeText:
+				renderCh <- outputChunk{kind: "text", content: evt.Text}
+
+			case takeTurn.EventTypeThinking:
+				renderCh <- outputChunk{kind: "thinking", content: evt.Thinking}
+
+			case takeTurn.EventTypeToolCall:
+				toolCallName = evt.ToolCall.ToolUseName
+				toolCallInput = string(evt.ToolCall.ToolUseInput)
+				renderCh <- outputChunk{kind: "tool_start", toolName: toolCallName, toolInput: toolCallInput}
+
+			case takeTurn.EventTypeToolResult:
+				renderCh <- outputChunk{kind: "tool_result", toolName: toolCallName, toolInput: toolCallInput, content: evt.ToolResult.ToolResultContent, toolError: evt.ToolResult.ToolResultError}
+
+			case takeTurn.EventTypeDone:
+				renderCh <- outputChunk{kind: "flush"}
+				close(renderCh)
+			}
 		}
 	}
 
+	streamWg.Wait()
 	<-renderCh
 
-	if err := stream.Err(); err != nil {
-		return fmt.Errorf("agent: %w", err)
+	// Check error after loop - handle signal-based cancellation
+	if streamErr != nil {
+		// Check if context was cancelled (Ctrl-c/Ctrl-\)
+		if ctx.Err() != nil || shutdownReason != "" {
+			bufio.NewWriter(os.Stdout).Flush()
+			msg := shutdownReason
+			if msg == "" {
+				msg = "interrupted"
+			}
+			fmt.Fprintf(os.Stderr, "\n%s\n", InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), msg)))
+			return nil
+		}
+		return fmt.Errorf("agent: %w", streamErr)
 	}
 
-
+	// Normal completion - print session summary
 	duration := time.Since(startTime)
 	messages := agent.Messages()
 	totalTokens := estimateTokens(messages)
