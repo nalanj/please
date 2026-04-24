@@ -158,87 +158,145 @@ func run() error {
 	stream := agent.Run(ctx, message)
 	defer stream.Close()
 
-	// Buffer for building styled tool blocks
-	var (
-		toolCallName   string
-		toolCallInput string
-		buffering      bool
-		bufferedOutput strings.Builder
-	)
-
-	flushBuffer := func() {
-		if buffering {
-			fmt.Fprintf(os.Stderr, "%s", bufferedOutput.String())
-			bufferedOutput.Reset()
-			buffering = false
-		}
+	// Decoupled rendering: receive events fast, render gradually
+	type outputChunk struct {
+		kind     string
+		content  string
+		toolName string
+		toolInput string
+		toolError bool
 	}
+	renderCh := make(chan outputChunk, 100)
+
+	isWordBoundary := func(r rune) bool {
+		return r == ' ' || r == '\n' || r == '\t' || r == '.' || r == ',' || r == '!' || r == '?' || r == ';' || r == ':'
+	}
+
+	// Render goroutine
+	go func() {
+		var textBuffer, thinkingBuffer strings.Builder
+		const flushThreshold = 10
+		var prevKind string // track previous chunk kind for section switches
+
+		flushText := func(instant bool) {
+			if textBuffer.Len() > 0 {
+				fmt.Print(mdRenderer.Write(textBuffer.String()))
+				textBuffer.Reset()
+			}
+			if !instant {
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+
+		flushThinking := func(instant bool) {
+			if thinkingBuffer.Len() > 0 {
+				fmt.Print(ThoughtStyle.Render(thinkingBuffer.String()))
+				thinkingBuffer.Reset()
+			}
+			if !instant {
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+
+		// Instant flush both buffers (for section switches)
+		flushBothInstant := func() {
+			flushText(true)
+			flushThinking(true)
+		}
+
+		for chunk := range renderCh {
+			instant := len(renderCh) > flushThreshold
+
+			// Check for section switch (text <-> thinking transition)
+			if prevKind != "" && prevKind != chunk.kind {
+				// Switching sections - instant flush before continuing
+				flushBothInstant()
+			}
+			prevKind = chunk.kind
+
+			switch chunk.kind {
+			case "text":
+				for _, r := range chunk.content {
+					textBuffer.WriteRune(r)
+					if isWordBoundary(r) {
+						flushText(instant)
+					}
+				}
+
+			case "thinking":
+				for _, r := range chunk.content {
+					thinkingBuffer.WriteRune(r)
+					if isWordBoundary(r) {
+						flushThinking(instant)
+					}
+				}
+
+			case "tool_start":
+				flushBothInstant()
+
+			case "tool_result":
+				flushBothInstant()
+				fmt.Fprintf(os.Stderr, "\n")
+				if chunk.toolError {
+					render.RenderToolError(chunk.toolName, chunk.toolInput, chunk.content, chunk.content)
+				} else {
+					render.RenderToolCall(chunk.toolName, chunk.toolInput, chunk.content, formatResultSummary(chunk.toolName, chunk.content))
+				}
+
+			case "flush":
+				// Final flush - instant
+				flushBothInstant()
+				if remaining := mdRenderer.Flush(); remaining != "" {
+					fmt.Print(remaining)
+				}
+			}
+		}
+
+		// Final flush - instant (true)
+		flushBothInstant()
+		if remaining := mdRenderer.Flush(); remaining != "" {
+			fmt.Print(remaining)
+		}
+	}()
+
+	var toolCallName, toolCallInput string
 
 	for stream.Next() {
 		evt := stream.Event()
 		switch evt.Type {
 		case takeTurn.EventTypeText:
-			if buffering {
-				bufferedOutput.WriteString(evt.Text)
-			} else {
-				fmt.Print(mdRenderer.Write(evt.Text))
-			}
+			renderCh <- outputChunk{kind: "text", content: evt.Text}
 
 		case takeTurn.EventTypeThinking:
-			// Collapse mid-line excessive whitespace (3+ spaces) that causes visual gaps
-			// but preserve meaningful spacing
-			lines := strings.Split(evt.Thinking, "\n")
-			for i, line := range lines {
-				// Trim trailing first
-				line = strings.TrimRight(line, " \t")
-				// Collapse 3+ spaces to single space (formatting artifacts)
-				for strings.Contains(line, "   ") {
-					line = strings.Replace(line, "   ", " ", -1)
-				}
-				lines[i] = line
-			}
-			thinking := strings.TrimRight(strings.Join(lines, "\n"), "\r\n")
-			if thinking != "" {
-				fmt.Print(ThoughtStyle.Render(thinking))
-			}
+			renderCh <- outputChunk{kind: "thinking", content: evt.Thinking}
 
 		case takeTurn.EventTypeToolCall:
 			toolCallName = evt.ToolCall.ToolUseName
 			toolCallInput = string(evt.ToolCall.ToolUseInput)
-			buffering = true
-			bufferedOutput.Reset()
+			renderCh <- outputChunk{kind: "tool_start", toolName: toolCallName, toolInput: toolCallInput}
 
 		case takeTurn.EventTypeToolResult:
-			// Render the complete styled block
-			fmt.Fprintf(os.Stderr, "\n")
-			if evt.ToolResult.ToolResultError {
-				render.RenderToolError(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, evt.ToolResult.ToolResultContent)
-			} else {
-				render.RenderToolCall(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, formatResultSummary(toolCallName, evt.ToolResult.ToolResultContent))
-			}
-			bufferedOutput.Reset()
-			buffering = false
+			renderCh <- outputChunk{kind: "tool_result", toolName: toolCallName, toolInput: toolCallInput, content: evt.ToolResult.ToolResultContent, toolError: evt.ToolResult.ToolResultError}
 
 		case takeTurn.EventTypeDone:
-			flushBuffer()
-			// Flush any remaining markdown buffer
-			if remaining := mdRenderer.Flush(); remaining != "" {
-				fmt.Print(remaining)
-			}
-			fmt.Println()
+			renderCh <- outputChunk{kind: "flush"}
+			close(renderCh)
 		}
 	}
-	flushBuffer()
+
+	<-renderCh
+
 	if err := stream.Err(); err != nil {
 		return fmt.Errorf("agent: %w", err)
 	}
+
 
 	duration := time.Since(startTime)
 	messages := agent.Messages()
 	totalTokens := estimateTokens(messages)
 	contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
 
-	fmt.Fprintf(os.Stderr, "%s\n",
+	fmt.Fprintf(os.Stderr, "\n%s\n",
 		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
 			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 
