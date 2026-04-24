@@ -36,6 +36,9 @@ var ThoughtStyle = lipgloss.NewStyle().Italic(true)
 // Markdown renderer for streaming text
 var mdRenderer = md.New()
 
+// InfoStyle for rendering the end-of-turn info line
+var InfoStyle = lipgloss.NewStyle().Faint(true)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -96,6 +99,8 @@ func run() error {
 	}
 	agent := takeTurn.New(provider, defaultModel, opts...)
 	prevCount := len(existing)
+
+	startTime := time.Now()
 
 	// Run the agent
 	ctx, cancel := context.WithCancel(context.Background())
@@ -178,6 +183,14 @@ func run() error {
 	if err := stream.Err(); err != nil {
 		return fmt.Errorf("agent: %w", err)
 	}
+
+	duration := time.Since(startTime)
+	messages := agent.Messages()
+	totalTokens := estimateTokens(messages)
+
+	fmt.Fprintf(os.Stderr, "%s\n",
+		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %d tokens in context • %.1fs",
+			defaultModel, providerName(), sessionID(sessionPath), totalTokens, duration.Seconds())))
 
 	// Persist new messages
 	newMessages := agent.Messages()[prevCount:]
@@ -294,4 +307,47 @@ func appendSession(path string, messages []llm.Message) error {
 		}
 	}
 	return nil
+}
+
+// providerName returns a human-readable name for the current provider.
+func providerName() string {
+	return "MiniMax"
+}
+
+// sessionID extracts the session ID from a session file path.
+func sessionID(path string) string {
+	base := filepath.Base(path)
+	if idx := strings.Index(base, ".jsonl"); idx != -1 {
+		base = base[:idx]
+	}
+	return base
+}
+
+// estimateTokens estimates the total token count for all messages.
+func estimateTokens(messages []llm.Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += estimateMessageTokens(msg)
+	}
+	return total
+}
+
+// estimateMessageTokens estimates the token count for a single message.
+func estimateMessageTokens(msg llm.Message) int {
+	var sb strings.Builder
+	sb.WriteString(string(msg.Role))
+	for _, block := range msg.Content {
+		switch block.Type {
+		case llm.ContentTypeText:
+			sb.WriteString(block.Text)
+		case llm.ContentTypeThinking:
+			sb.WriteString(block.Thinking)
+		case llm.ContentTypeToolUse:
+			sb.WriteString(block.ToolUseName)
+			sb.WriteString(string(block.ToolUseInput))
+		case llm.ContentTypeToolResult:
+			sb.WriteString(block.ToolResultContent)
+		}
+	}
+	return len(sb.String()) / 4
 }
