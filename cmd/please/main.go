@@ -23,11 +23,12 @@ import (
 )
 
 const (
-	defaultModel      = "minimax-m2.7"
-	systemFile        = "SYSTEM.md"
-	dotPleaseDir      = ".please"
-	sessionsDir       = "sessions"
-	currentSessionSym = "current-session"
+	defaultModel         = "minimax-m2.7"
+	systemFile           = "SYSTEM.md"
+	dotPleaseDir         = ".please"
+	sessionsDir          = "sessions"
+	currentSessionSym    = "current-session"
+	defaultContextLimit  = 200000
 )
 
 // ThoughtStyle for rendering thought/thinking output
@@ -218,10 +219,11 @@ func run() error {
 	duration := time.Since(startTime)
 	messages := agent.Messages()
 	totalTokens := estimateTokens(messages)
+	contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
 
 	fmt.Fprintf(os.Stderr, "%s\n",
-		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %d tokens in context • %.1fs",
-			defaultModel, providerName(), sessionID(sessionPath), totalTokens, duration.Seconds())))
+		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
+			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 
 	// Persist new messages
 	newMessages := agent.Messages()[prevCount:]
