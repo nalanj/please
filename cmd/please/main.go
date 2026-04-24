@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
 	"github.com/google/uuid"
 
@@ -31,6 +32,9 @@ const (
 
 // ThoughtStyle for rendering thought/thinking output
 var ThoughtStyle = lipgloss.NewStyle().Italic(true)
+
+// Markdown renderer for streaming text
+var mdRenderer = md.New()
 
 func main() {
 	if err := run(); err != nil {
@@ -123,7 +127,7 @@ func run() error {
 			if buffering {
 				bufferedOutput.WriteString(evt.Text)
 			} else {
-				fmt.Print(evt.Text)
+				fmt.Print(mdRenderer.Write(evt.Text))
 			}
 
 		case takeTurn.EventTypeThinking:
@@ -163,6 +167,10 @@ func run() error {
 
 		case takeTurn.EventTypeDone:
 			flushBuffer()
+			// Flush any remaining markdown buffer
+			if remaining := mdRenderer.Flush(); remaining != "" {
+				fmt.Print(remaining)
+			}
 			fmt.Println()
 		}
 	}

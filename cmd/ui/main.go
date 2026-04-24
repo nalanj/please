@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	md "github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
 	"github.com/nalanj/please/util/tools"
 )
@@ -45,13 +47,11 @@ func main() {
 		}
 
 	case "tool-write":
-		// Read current file content to get the hash
 		readResult, err := tools.Read.Handler(ctx, json.RawMessage(`{"path":"/tmp/please-demo.txt"}`))
 		if err != nil {
 			render.RenderToolError("write_file", `{"path":"/tmp/please-demo.txt"}`, "", err.Error())
 			return
 		}
-		// Parse first line hash from read output (format: "line:hash|content")
 		lines := strings.Split(strings.TrimSpace(readResult), "\n")
 		var firstHash string
 		for _, line := range lines {
@@ -81,18 +81,70 @@ func main() {
 			render.RenderToolCall("bash", `{"command":"cat missing.txt"}`, result, "→ done")
 		}
 
+	case "markdown", "markdown-stream":
+		// Streaming demo with timing
+		streamMarkdown(true)
+
+	case "markdown-fast":
+		// Fast streaming demo
+		streamMarkdown(false)
+
 	default:
 		printUsage()
 		os.Exit(1)
 	}
 }
 
+// streamMarkdown simulates streaming markdown output like an LLM would send it.
+func streamMarkdown(slow bool) {
+	r := md.New()
+
+	type chunk struct {
+		text  string
+		delay time.Duration
+	}
+	chunks := []chunk{
+		{"# Hello World", 80 * time.Millisecond},
+		{"\n\n", 50 * time.Millisecond},
+		{"This is ", 30 * time.Millisecond},
+		{"**bold**", 60 * time.Millisecond},
+		{" and ", 40 * time.Millisecond},
+		{"*italic*", 50 * time.Millisecond},
+		{" text.\n\n", 70 * time.Millisecond},
+		{"## Code Example\n\n", 90 * time.Millisecond},
+		{"```go\nfunc main() {\n", 100 * time.Millisecond},
+		{"    fmt.Println(`hello`)\n", 80 * time.Millisecond},
+		{"}\n", 40 * time.Millisecond},
+		{"```\n\n", 60 * time.Millisecond},
+		{"- Item one\n", 50 * time.Millisecond},
+		{"- Item two\n", 45 * time.Millisecond},
+		{"- Item three\n", 55 * time.Millisecond},
+	}
+
+	for _, c := range chunks {
+		output := r.Write(c.text)
+		if output != "" {
+			fmt.Print(output)
+		}
+		if slow {
+			time.Sleep(c.delay)
+		}
+	}
+
+	if remaining := r.Flush(); remaining != "" {
+		fmt.Print(remaining)
+	}
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: ui <sample>")
 	fmt.Fprintln(os.Stderr, "Samples:")
-	fmt.Fprintln(os.Stderr, "  tool-bash    - bash tool with file output")
-	fmt.Fprintln(os.Stderr, "  tool-find    - find tool with file output")
-	fmt.Fprintln(os.Stderr, "  tool-read    - read tool with file content")
-	fmt.Fprintln(os.Stderr, "  tool-write   - write_file tool success")
-	fmt.Fprintln(os.Stderr, "  tool-error   - error result")
+	fmt.Fprintln(os.Stderr, "  tool-bash        - bash tool with file output")
+	fmt.Fprintln(os.Stderr, "  tool-find        - find tool with file output")
+	fmt.Fprintln(os.Stderr, "  tool-read        - read tool with file content")
+	fmt.Fprintln(os.Stderr, "  tool-write       - write_file tool success")
+	fmt.Fprintln(os.Stderr, "  tool-error       - error result")
+	fmt.Fprintln(os.Stderr, "  markdown         - streaming markdown demo")
+	fmt.Fprintln(os.Stderr, "  markdown-stream  - alias for markdown")
+	fmt.Fprintln(os.Stderr, "  markdown-fast    - fast streaming without delays")
 }
