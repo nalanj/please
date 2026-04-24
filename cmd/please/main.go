@@ -296,6 +296,8 @@ func run() error {
 	totalTokens := estimateTokens(messages)
 	contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
 
+	// Ensure stdout is fully flushed before printing conclusion line
+	bufio.NewWriter(os.Stdout).Flush()
 	fmt.Fprintf(os.Stderr, "\n%s\n",
 		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
 			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
