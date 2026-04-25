@@ -5,8 +5,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ThoughtStyle renders thinking/thinking output in italic.
-var ThoughtStyle = lipgloss.NewStyle().Italic(true)
+// ThoughtStyle renders thinking output in italic and lighter/fainter.
+var ThoughtStyle = lipgloss.NewStyle().
+	Italic(true).
+	Faint(true)
 
 // InfoStyle renders the end-of-turn info line in faint.
 var InfoStyle = lipgloss.NewStyle().Faint(true)
