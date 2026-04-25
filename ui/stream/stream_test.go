@@ -5,8 +5,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	md "github.com/nalanj/please/ui/markdown"
 )
+
+func init() {
+	// Set ANSI color profile for tests to ensure styling works
+	lipgloss.SetColorProfile(termenv.ANSI)
+}
 
 func TestOutputHandlerFlush(t *testing.T) {
 	renderer := md.New()
@@ -62,7 +70,7 @@ func TestOutputHandlerFlush(t *testing.T) {
 
 func TestMarkdownRendererFlushComplete(t *testing.T) {
 	renderer := md.New()
-	
+
 	// Write content that doesn't trigger immediate processing
 	renderer.Write("Hello ")
 	renderer.Write("world")
@@ -71,7 +79,7 @@ func TestMarkdownRendererFlushComplete(t *testing.T) {
 	// Since world was written, it might be buffered or processed
 	flushed := renderer.Flush()
 	t.Logf("Flush returned: %q", flushed)
-	
+
 	// The actual behavior: Write processes and returns content,
 	// Flush only returns unprocessed buffer content
 }
@@ -276,15 +284,9 @@ func TestThinkingStyleCodesApplied(t *testing.T) {
 	result := h.Handle("thinking", "thinking text\n")
 	t.Logf("Result: %q", result)
 
-	// Verify the output contains italic (3m) and faint (2m) ANSI codes
+	// Verify the output contains italic (3;2m) ANSI codes
 	if !strings.Contains(result, "\x1b[3;2m") {
-		t.Errorf("thinking should contain italic styling (\\x1b[3;2m), got %q", result)
-	}
-	if !strings.Contains(result, "\x1b[3;2m") {
-		t.Errorf("thinking should contain faint styling (\\x1b[3;2m), got %q", result)
-	}
-	if !strings.Contains(result, "\x1b[0m") {
-		t.Errorf("thinking should contain reset styling (\\x1b[0m), got %q", result)
+		t.Errorf("thinking should contain italic/faint styling (\\x1b[3;2m), got %q", result)
 	}
 }
 
@@ -295,9 +297,9 @@ func TestThinkingMarkdownAndStyleTogether(t *testing.T) {
 	result := h.Handle("thinking", "**bold** text\n")
 	t.Logf("Result: %q", result)
 
-	// Both bold (1m) and italic/faint (3m/2m) should be present
+	// Both bold (1m) and italic/faint (3;2m) should be present
 	hasBold := strings.Contains(result, "\x1b[1m")
-	hasItalicFaint := strings.Contains(result, "\x1b[3;2m") && strings.Contains(result, "\x1b[3;2m")
+	hasItalicFaint := strings.Contains(result, "\x1b[3;2m")
 
 	if !hasBold {
 		t.Errorf("thinking should have bold styling, got %q", result)

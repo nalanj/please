@@ -3,19 +3,7 @@ package stream
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
-
-// init sets the color profile to ANSI to ensure styling works in non-TTY
-// environments (tests, pipes). This is safe because:
-// - ThoughtStyle uses only basic attributes (italic, faint) supported by ANSI
-// - Other packages use RawANSI renderer which bypasses color profile
-func init() {
-	// Only set if no color profile has been detected yet
-	if termenv.ColorProfile() == termenv.Ascii {
-		lipgloss.SetColorProfile(termenv.ANSI)
-	}
-}
 
 // ThoughtStyle renders thinking output in italic and lighter/fainter.
 var ThoughtStyle = lipgloss.NewStyle().
