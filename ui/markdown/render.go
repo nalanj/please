@@ -7,31 +7,18 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/lipgloss"
-
+	"github.com/nalanj/please/util/ansi"
 	"github.com/nalanj/please/util/terminal"
 )
 
 // Styles for markdown elements.
-var (
-	HeaderStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#81A1C1")).
-			Bold(true)
-
-	BoldStyle = lipgloss.NewStyle().Bold(true)
-
-	ItalicStyle = lipgloss.NewStyle().Italic(true)
-
-	CodeStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#A3BE8C")).
-			Background(lipgloss.Color("#2E3440"))
-
-	LinkStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#88C0D0")).
-			Underline(true)
-
-	ListStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D8DEE9"))
+const (
+	HeaderStyle = ansiHeader + ansiBold
+	BoldStyle   = ansiBold
+	ItalicStyle = ansiItalic
+	CodeStyle   = ansiCode
+	LinkStyle   = ansiLink
+	ListStyle   = ansiList
 )
 
 // Renderer handles streaming markdown rendering.
@@ -293,7 +280,11 @@ func processMarkdown(text string) (before, styled, after string) {
 			if prefixLen > 0 {
 				headerText = text[:prefixLen] + headerText
 			}
-			styled = ansiHeader + ansiBold + headerText + ansiReset
+			if ansi.IsColorEnabled() {
+				styled = ansiHeader + ansiBold + headerText + ansiReset
+			} else {
+				styled = headerText
+			}
 			// Preserve leading whitespace in after
 			afterContent := text[end+prefixLen+1:]
 			if prefixLen > 0 && len(afterContent) > 0 {
@@ -316,7 +307,11 @@ func processMarkdown(text string) (before, styled, after string) {
 			endIdx := strings.Index(rest, "**")
 			if endIdx >= 0 {
 				boldText := rest[:endIdx]
-				styled = ansiBold + boldText + ansiReset
+				if ansi.IsColorEnabled() {
+					styled = ansiBold + boldText + ansiReset
+				} else {
+					styled = boldText
+				}
 				afterContent := rest[endIdx+2:]
 				// Preserve leading whitespace in after
 				if prefixLen > 0 && len(afterContent) > 0 && strings.TrimLeft(afterContent, " \t") == "" {
@@ -345,7 +340,11 @@ func processMarkdown(text string) (before, styled, after string) {
 							continue
 						}
 						codeText := rest[:j]
-						styled = ansiCode + codeText + ansiReset
+						if ansi.IsColorEnabled() {
+							styled = ansiCode + codeText + ansiReset
+						} else {
+							styled = codeText
+						}
 						return text[:i], styled, rest[j+1:]
 					}
 				}
@@ -365,7 +364,11 @@ func processMarkdown(text string) (before, styled, after string) {
 		if prefixLen > 0 {
 			listText = text[:prefixLen] + listText
 		}
-		styled = ansiList + listText + "\n" + ansiReset
+		if ansi.IsColorEnabled() {
+			styled = ansiList + listText + "\n" + ansiReset
+		} else {
+			styled = listText + "\n"
+		}
 		afterStart := end + prefixLen + 1
 		if afterStart < len(text) {
 			// Preserve leading whitespace in after
@@ -388,13 +391,17 @@ func processMarkdown(text string) (before, styled, after string) {
 		if prefixLen > 0 {
 			listText = text[:prefixLen] + listText
 		}
-		styled = ansiList + listText + "\n" + ansiReset
+		if ansi.IsColorEnabled() {
+			styled = ansiList + listText + "\n" + ansiReset
+		} else {
+			styled = listText + "\n"
+		}
 		afterStart := end + prefixLen + 1
 		if afterStart < len(text) {
 			// Preserve leading whitespace in after
 			afterContent := text[afterStart:]
 			if prefixLen > 0 && len(afterContent) > 0 && strings.TrimLeft(afterContent, " \t") == "" {
-				afterContent = text[end+prefixLen+1:]
+				afterContent = text[end+prefixLen+1:] // Keep original
 			}
 			return "", styled, afterContent
 		}
@@ -423,7 +430,11 @@ func processMarkdown(text string) (before, styled, after string) {
 							continue
 						}
 						italicText := rest[:j]
-						styled = ansiItalic + italicText + ansiReset
+						if ansi.IsColorEnabled() {
+							styled = ansiItalic + italicText + ansiReset
+						} else {
+							styled = italicText
+						}
 						return text[:i], styled, rest[j+1:]
 					}
 				}
@@ -451,6 +462,26 @@ func renderCodeBlock(content string) string {
 	lang := ""
 	if len(lines) > 0 && len(lines[0]) > 0 && len(lines[0]) < 20 && !strings.Contains(lines[0], " ") {
 		lang = lines[0]
+	}
+
+	// If colors are disabled, render as plain text code block
+	if !ansi.IsColorEnabled() {
+		var b strings.Builder
+		b.WriteString("```")
+		if lang != "" {
+			b.WriteString(lang)
+		}
+		b.WriteString("\n")
+		startIdx := 0
+		if lang != "" {
+			startIdx = 1
+		}
+		for i := startIdx; i < len(lines); i++ {
+			b.WriteString(lines[i])
+			b.WriteString("\n")
+		}
+		b.WriteString("```\n")
+		return b.String()
 	}
 
 	// ANSI escape sequences - darker background (color index 235)
@@ -568,4 +599,5 @@ const (
 	ansiHeader = "\x1b[38;5;226m"  // Yellow
 	ansiCode   = "\x1b[38;5;114m" // Light green
 	ansiList   = "\x1b[38;5;188m" // Light gray
+	ansiLink   = "\x1b[38;5;109m" // Cyan
 )

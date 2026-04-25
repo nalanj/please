@@ -12,10 +12,10 @@ const FlushThreshold = 10
 
 // OutputHandler manages streaming output with buffers for different content kinds.
 type OutputHandler struct {
-	md        *md.Renderer
-	textBuf   strings.Builder
-	thinkBuf  strings.Builder
-	prevKind  string
+	md       *md.Renderer
+	textBuf  strings.Builder
+	thinkBuf strings.Builder
+	prevKind string
 }
 
 // New creates a new OutputHandler with the given md renderer.
@@ -137,10 +137,10 @@ func (h *OutputHandler) processThinking(content string, instant bool) string {
 		if isWordBoundary(r) {
 			// Get the buffer content
 			bufStr := h.thinkBuf.String()
-			
+
 			// Render through markdown
 			mdRendered := h.md.Write(bufStr)
-			
+
 			// Only apply style if:
 			// 1. Content is not just whitespace
 			// 2. Markdown actually rendered something (not pending)
@@ -151,7 +151,7 @@ func (h *OutputHandler) processThinking(content string, instant bool) string {
 				result.WriteString(mdRendered)
 			}
 			// If mdRendered is empty (pending), don't output anything - content stays in buffer
-			
+
 			h.thinkBuf.Reset()
 		}
 	}

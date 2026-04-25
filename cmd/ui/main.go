@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	ansi "github.com/nalanj/please/util/ansi"
 	md "github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
 	"github.com/nalanj/please/ui/stream"
@@ -184,7 +184,7 @@ Let me wrap up my thinking.`
 	// Show a newline after thinking
 	fmt.Println()
 	fmt.Println()
-	fmt.Print(lipgloss.NewStyle().Faint(true).Render("→ End of thinking"))
+	fmt.Print(ansi.Faint("→ End of thinking"))
 }
 
 func printUsage() {

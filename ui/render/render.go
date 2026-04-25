@@ -8,21 +8,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/nalanj/please/util/ansi"
 	"github.com/nalanj/please/util/terminal"
 )
 
-// Styling
-var (
-	ToolBgStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#2E3440")).
-			Foreground(lipgloss.Color("#D8DEE9"))
-
-	ToolResultStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E5C07B"))
-
-	ToolErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E06C75"))
+// Styling - using ANSI codes directly
+const (
+	// Nord palette colors
+	ToolBgFG      = ansi.FgNord4      // #D8DEE9 - light gray
+	ToolBgBG      = ansi.BgNord0      // #2E3440 - dark background
+	ToolResultFG  = ansi.FgNord11    // #EBCB8B - yellow
+	ToolErrorFG   = ansi.FgNord9     // #BF616A - red
 )
 
 // TerminalWidth returns the terminal width, defaulting to 80.
@@ -74,6 +70,7 @@ func FormatToolInput(name, input string) string {
 
 	return input
 }
+
 // RenderToolCall renders a tool call block:
 //   - Title line: "[tool_name] [input]"
 //   - Buffered output lines
@@ -86,7 +83,7 @@ func RenderToolCall(name, input, output, result string) {
 
 	// Styled block
 	// Margin above
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	// Title with formatted input (write_file shows details below)
@@ -101,7 +98,7 @@ func RenderToolCall(name, input, output, result string) {
 	RenderLine(title, width)
 
 	// Blank line between title and output
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	// Output lines
@@ -122,7 +119,7 @@ func RenderToolCall(name, input, output, result string) {
 	RenderResultLine(" "+result+" ", width)
 
 	// Margin below
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	// Blank line below (default background)
@@ -138,7 +135,7 @@ func RenderToolError(name, input, output, errMsg string) {
 
 	// Styled block
 	// Margin above
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	// Title with formatted input
@@ -153,7 +150,7 @@ func RenderToolError(name, input, output, errMsg string) {
 	RenderLine(title, width)
 
 	// Blank line between title and output
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
@@ -165,20 +162,44 @@ func RenderToolError(name, input, output, errMsg string) {
 	RenderErrorLine(" "+errMsg+" ", width)
 
 	// Margin below
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render("")))
+	os.Stderr.Write([]byte(makeBgLine("", width)))
 	os.Stderr.Write([]byte("\n"))
 
 	// Blank line below (default background)
 	os.Stderr.Write([]byte("\n"))
 }
 
-// RenderLine renders a line with the tool background and padding.
-func RenderLine(text string, width int) {
-	padding := width - len(text)
+// makeBgLine creates a line with the tool background styling.
+func makeBgLine(text string, width int) string {
+	if !ansi.IsColorEnabled() {
+		padding := width - len(text)
+		if padding < 0 {
+			padding = 0
+		}
+		return text + strings.Repeat(" ", padding)
+	}
+
+	var b strings.Builder
+	b.WriteString(ToolBgBG)
+	b.WriteString(ToolBgFG)
+	b.WriteString(text)
+
+	// Calculate visible length and pad to width
+	visibleLen := len(text)
+	padding := width - visibleLen
 	if padding < 0 {
 		padding = 0
 	}
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render(text)))
+	for i := 0; i < padding; i++ {
+		b.WriteRune(' ')
+	}
+	b.WriteString(ansi.Reset)
+	return b.String()
+}
+
+// RenderLine renders a line with the tool background and padding.
+func RenderLine(text string, width int) {
+	os.Stderr.Write([]byte(makeBgLine(text, width)))
 	os.Stderr.Write([]byte("\n"))
 }
 
@@ -188,7 +209,26 @@ func RenderResultLine(text string, width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render(ToolResultStyle.Render(text))))
+
+	if !ansi.IsColorEnabled() {
+		os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString(ToolBgBG)
+	b.WriteString(ToolBgFG)
+	b.WriteString(text)
+	b.WriteString(ToolResultFG)
+	b.WriteString(ansi.Reset)
+	b.WriteString(ToolBgBG)
+	b.WriteString(ToolBgFG)
+
+	for i := 0; i < padding; i++ {
+		b.WriteRune(' ')
+	}
+	b.WriteString(ansi.Reset)
+	os.Stderr.Write([]byte(b.String()))
 	os.Stderr.Write([]byte("\n"))
 }
 
@@ -198,7 +238,26 @@ func RenderErrorLine(text string, width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	os.Stderr.Write([]byte(ToolBgStyle.Width(width).Render(ToolErrorStyle.Render(text))))
+
+	if !ansi.IsColorEnabled() {
+		os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString(ToolBgBG)
+	b.WriteString(ToolBgFG)
+	b.WriteString(text)
+	b.WriteString(ToolErrorFG)
+	b.WriteString(ansi.Reset)
+	b.WriteString(ToolBgBG)
+	b.WriteString(ToolBgFG)
+
+	for i := 0; i < padding; i++ {
+		b.WriteRune(' ')
+	}
+	b.WriteString(ansi.Reset)
+	os.Stderr.Write([]byte(b.String()))
 	os.Stderr.Write([]byte("\n"))
 }
 
@@ -267,6 +326,7 @@ func formatReadOutput(output string, width int) {
 			} else {
 				// Wrapped lines: indent to align with content
 				indent := strings.Repeat(" ", maxNumWidth+2)
+
 				lineStr = indent + content
 			}
 			RenderLine(" "+lineStr+" ", width)
