@@ -6,9 +6,15 @@ import (
 	"github.com/muesli/termenv"
 )
 
+// init sets the color profile to ANSI to ensure styling works in non-TTY
+// environments (tests, pipes). This is safe because:
+// - ThoughtStyle uses only basic attributes (italic, faint) supported by ANSI
+// - Other packages use RawANSI renderer which bypasses color profile
 func init() {
-	// Ensure ANSI codes are always output, even in non-TTY environments (tests, pipes)
-	lipgloss.SetColorProfile(termenv.ANSI)
+	// Only set if no color profile has been detected yet
+	if termenv.ColorProfile() == termenv.Ascii {
+		lipgloss.SetColorProfile(termenv.ANSI)
+	}
 }
 
 // ThoughtStyle renders thinking output in italic and lighter/fainter.
