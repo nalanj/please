@@ -68,7 +68,8 @@ func (h *OutputHandler) switchSection() {
 	}
 	// Flush thinking buffer
 	if h.thinkBuf.Len() > 0 {
-		fmt.Print(ThoughtStyle.Render(h.thinkBuf.String()))
+		mdRendered := h.md.Write(h.thinkBuf.String())
+		fmt.Print(ThoughtStyle.Render(mdRendered))
 		h.thinkBuf.Reset()
 	}
 	// Reset md renderer state for new context
