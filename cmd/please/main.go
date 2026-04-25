@@ -18,6 +18,8 @@ import (
 	"github.com/nalanj/please/ui/render"
 	uistream "github.com/nalanj/please/ui/stream"
 
+	"github.com/nalanj/please/session"
+
 	"github.com/nalanj/please/ops/agent/takeTurn"
 	"github.com/nalanj/please/util/llm"
 	"github.com/nalanj/please/util/llm/anthropic"
@@ -402,16 +404,8 @@ func loadOrCreateSession() (string, error) {
 
 // newSession creates a new session file and updates the symlink.
 func newSession(symlinkPath string) (string, error) {
-	sessionID := uuid.New().String()[:8]
-	sessionFilename := fmt.Sprintf("%s.jsonl", sessionID)
-	sessionPath := filepath.Join(dotPleaseDir, sessionsDir, sessionFilename)
-
-	// Create empty session file
-	f, err := os.Create(sessionPath)
+	sessionPath, err := session.CreateNewSession(filepath.Join(dotPleaseDir, sessionsDir))
 	if err != nil {
-		return "", err
-	}
-	if err := f.Close(); err != nil {
 		return "", err
 	}
 
@@ -423,34 +417,55 @@ func newSession(symlinkPath string) (string, error) {
 	return sessionPath, nil
 }
 
-// loadSession reads messages from a session file.
+// loadSession reads messages from a session file using the session package.
 func loadSession(path string) ([]llm.Message, error) {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	// Use the session.Reader to load turns
+	reader := session.NewReader(path)
+	turns, err := reader.Load()
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
-
-	var messages []llm.Message
-	scanner := bufio.NewScanner(f)
-	// Allow large lines for tool results
-	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var msg llm.Message
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("malformed session line: %w", err)
-		}
-		messages = append(messages, msg)
+	if turns == nil {
+		return nil, nil
 	}
-	return messages, scanner.Err()
+
+	// Convert turns to messages
+	messages := make([]llm.Message, 0, len(turns)*2)
+	for _, turn := range turns {
+		// Add user message
+		if turn.Input != "" {
+			messages = append(messages, llm.TextMessage(llm.RoleUser, turn.Input))
+		}
+		// Convert events to assistant message
+		var content []llm.ContentBlock
+		for _, evt := range turn.Events {
+			switch evt.Type {
+			case "text":
+				content = append(content, llm.ContentBlock{Type: llm.ContentTypeText, Text: evt.Chunk})
+			case "thinking":
+				content = append(content, llm.ContentBlock{Type: llm.ContentTypeThinking, Thinking: evt.Chunk})
+			case "tool_call":
+				content = append(content, llm.ContentBlock{
+					Type:           llm.ContentTypeToolUse,
+					ToolUseID:       evt.ID,
+					ToolUseName:     evt.Name,
+					ToolUseInput:    json.RawMessage(evt.Input),
+				})
+			case "tool_result":
+				content = append(content, llm.ContentBlock{
+					Type:              llm.ContentTypeToolResult,
+					ToolResultID:      evt.ID,
+					ToolResultContent: evt.Content,
+					ToolResultError:   evt.Error,
+				})
+			}
+		}
+		if len(content) > 0 {
+			messages = append(messages, llm.Message{Role: llm.RoleAssistant, Content: content})
+		}
+	}
+
+	return messages, nil
 }
 
 // formatResultSummary creates a human-readable summary of tool results.
