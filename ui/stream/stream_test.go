@@ -255,3 +255,58 @@ func TestStreamSyncWithRenderDone(t *testing.T) {
 		t.Errorf("expected 'Hello world' in output, got %q", result)
 	}
 }
+
+func TestThinkingMarkdownRenderingWorks(t *testing.T) {
+	h := New(md.New())
+
+	// Write thinking content with bold markdown
+	result := h.Handle("thinking", "this is **bold** text\n")
+	t.Logf("Result: %q", result)
+
+	// Verify bold was rendered (should contain bold ANSI code \x1b[1m)
+	if !strings.Contains(result, "\x1b[1m") {
+		t.Errorf("thinking with **bold** should contain bold styling, got %q", result)
+	}
+}
+
+func TestThinkingStyleCodesApplied(t *testing.T) {
+	h := New(md.New())
+
+	// Write simple thinking content
+	result := h.Handle("thinking", "thinking text\n")
+	t.Logf("Result: %q", result)
+
+	// Verify the output contains italic (3m) and faint (2m) ANSI codes
+	if !strings.Contains(result, "\x1b[3;2m") {
+		t.Errorf("thinking should contain italic styling (\\x1b[3;2m), got %q", result)
+	}
+	if !strings.Contains(result, "\x1b[3;2m") {
+		t.Errorf("thinking should contain faint styling (\\x1b[3;2m), got %q", result)
+	}
+	if !strings.Contains(result, "\x1b[0m") {
+		t.Errorf("thinking should contain reset styling (\\x1b[0m), got %q", result)
+	}
+}
+
+func TestThinkingMarkdownAndStyleTogether(t *testing.T) {
+	h := New(md.New())
+
+	// Bold + italic/faint should all appear
+	result := h.Handle("thinking", "**bold** text\n")
+	t.Logf("Result: %q", result)
+
+	// Both bold (1m) and italic/faint (3m/2m) should be present
+	hasBold := strings.Contains(result, "\x1b[1m")
+	hasItalicFaint := strings.Contains(result, "\x1b[3;2m") && strings.Contains(result, "\x1b[3;2m")
+
+	if !hasBold {
+		t.Errorf("thinking should have bold styling, got %q", result)
+	}
+	if !hasItalicFaint {
+		t.Errorf("thinking should have italic/faint styling, got %q", result)
+	}
+}
+
+// Note: List items in thinking content may not render with list styling
+// because the streaming renderer flushes at word boundaries, breaking
+// the markdown pattern matching for multi-word patterns like "1. item"
