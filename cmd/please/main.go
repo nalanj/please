@@ -254,7 +254,7 @@ func run() error {
 					messages := agent.Messages()
 					totalTokens := estimateTokens(messages)
 					contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
-					fmt.Fprintf(os.Stderr, "\n%s\n",
+					fmt.Fprintf(os.Stderr, "\n\n%s\n",
 						uistream.InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs (saved)",
 							defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 					return nil
@@ -264,7 +264,7 @@ func run() error {
 			if shutdownReason == "" {
 				shutdownReason = "interrupted"
 			}
-			fmt.Fprintf(os.Stderr, "\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), shutdownReason)))
+			fmt.Fprintf(os.Stderr, "\n\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), shutdownReason)))
 			return nil
 
 		case evt, ok := <-eventCh:
@@ -313,7 +313,7 @@ func run() error {
 			if msg == "" {
 				msg = "interrupted"
 			}
-			fmt.Fprintf(os.Stderr, "\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), msg)))
+			fmt.Fprintf(os.Stderr, "\n\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), msg)))
 			return nil
 		}
 		return fmt.Errorf("agent: %w", streamErr)
@@ -327,7 +327,7 @@ func run() error {
 
 	// Ensure stdout is fully flushed before printing conclusion line
 	bufio.NewWriter(os.Stdout).Flush()
-	fmt.Fprintf(os.Stderr, "\n%s\n",
+	fmt.Fprintf(os.Stderr, "\n\n%s\n",
 		uistream.InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
 			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 
