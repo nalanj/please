@@ -213,6 +213,9 @@ func (r *Reader) Replay(opts ReplayOptions, w io.Writer) error {
 	iter.lastPrint = time.Now()
 	for iter.Next() {
 		evt := iter.Event()
+		if evt == nil {
+			break
+		}
 		if !iter.instant && iter.scale > 0 {
 			delay := time.Duration(float64(evt.Ms) / iter.scale * 1e6)
 			elapsed := time.Since(iter.lastPrint)
@@ -253,7 +256,11 @@ func (i *EventIterator) Event() *Event {
 	if i.turnIdx >= len(i.turns) {
 		return nil
 	}
-	return &i.turns[i.turnIdx].Events[i.eventIdx]
+	turn := &i.turns[i.turnIdx]
+	if i.eventIdx >= len(turn.Events) {
+		return nil
+	}
+	return &turn.Events[i.eventIdx]
 }
 
 // Turn returns metadata about the current turn.

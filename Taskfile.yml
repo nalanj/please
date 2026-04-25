@@ -35,3 +35,8 @@ tasks:
     desc: Run UI demo
     cmds:
       - go run ./cmd/ui {{.CLI_ARGS}}
+
+  replay:
+    desc: Replay a session
+    cmds:
+      - go run ./cmd/replay {{.CLI_ARGS}}

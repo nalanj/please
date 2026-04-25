@@ -59,5 +59,31 @@ func run(args []string, w io.Writer) error {
 	}
 
 	r := session.NewReader(sessionPath)
-	return r.Replay(opts, w)
+	turns, err := r.Load()
+	if err != nil {
+		return fmt.Errorf("loading session: %w", err)
+	}
+
+	// Manual iteration to avoid r.Replay issues
+	for turnIdx := 0; turnIdx < len(turns); turnIdx++ {
+		// Skip to fromTurn if specified
+		if opts.FromTurn > 0 && turnIdx < opts.FromTurn-1 {
+			continue
+		}
+		
+		turn := &turns[turnIdx]
+		for eventIdx := 0; eventIdx < len(turn.Events); eventIdx++ {
+			evt := &turn.Events[eventIdx]
+			
+			// Apply filter
+			if opts.Filter != "" && evt.Type != opts.Filter {
+				continue
+			}
+			
+			// Output the event
+			fmt.Fprintf(w, "%#v\n", evt)
+		}
+	}
+
+	return nil
 }
