@@ -92,7 +92,8 @@ func (h *OutputHandler) finalFlush(instant bool) string {
 
 	// Flush thinking buffer
 	if h.thinkBuf.Len() > 0 {
-		sb.WriteString(ThoughtStyle.Render(h.thinkBuf.String()))
+		mdRendered := h.md.Write(h.thinkBuf.String())
+		sb.WriteString(ThoughtStyle.Render(mdRendered))
 		h.thinkBuf.Reset()
 	}
 
@@ -125,13 +126,15 @@ func (h *OutputHandler) processText(content string, instant bool) string {
 }
 
 // processThinking handles thinking content with word-boundary flushing.
+// Content is rendered through markdown first, then styled with ThoughtStyle.
 func (h *OutputHandler) processThinking(content string, instant bool) string {
 	var result strings.Builder
 
 	for _, r := range content {
 		h.thinkBuf.WriteRune(r)
 		if isWordBoundary(r) {
-			result.WriteString(ThoughtStyle.Render(h.thinkBuf.String()))
+			mdRendered := h.md.Write(h.thinkBuf.String())
+			result.WriteString(ThoughtStyle.Render(mdRendered))
 			h.thinkBuf.Reset()
 		}
 	}
