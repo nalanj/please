@@ -2,13 +2,12 @@
 package md
 
 import (
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
+
+	"github.com/nalanj/please/util/terminal"
 )
 
 // Styles for markdown elements.
@@ -35,8 +34,10 @@ var (
 
 // Renderer handles streaming markdown rendering.
 type Renderer struct {
-	mu     sync.Mutex
-	buffer strings.Builder
+	mu          sync.Mutex
+	buffer      strings.Builder
+	inCodeBlock bool
+	prevWS      bool // previous was whitespace, for collapsing
 }
 
 // New creates a new streaming markdown renderer.
@@ -86,6 +87,16 @@ func (r *Renderer) Flush() string {
 	flushed := r.buffer.String()
 	r.buffer.Reset()
 	return flushed
+}
+
+// Reset clears all state for a new context (e.g., section switch).
+func (r *Renderer) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.buffer.Reset()
+	r.inCodeBlock = false
+	r.prevWS = false
 }
 
 // hasPendingMarker checks if there's an incomplete markdown marker in text.
@@ -438,16 +449,7 @@ func renderCodeBlock(content string) string {
 
 // terminalWidth returns the terminal width.
 func terminalWidth() int {
-	width, _, err := term.GetSize(0)
-	if err != nil || width <= 0 {
-		if cols := os.Getenv("COLUMNS"); cols != "" {
-			if w, err := strconv.Atoi(cols); err == nil && w > 0 {
-				return w
-			}
-		}
-		return 80
-	}
-	return width
+	return terminal.Width()
 }
 
 // findCodeBlockEnd finds the position of closing ``` in content after opening ```.

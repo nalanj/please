@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
 	"github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
+	uistream "github.com/nalanj/please/ui/stream"
 
 	"github.com/nalanj/please/ops/agent/takeTurn"
 	"github.com/nalanj/please/util/llm"
@@ -33,14 +33,8 @@ const (
 	defaultContextLimit = 200000
 )
 
-// ThoughtStyle for rendering thought/thinking output
-var ThoughtStyle = lipgloss.NewStyle().Italic(true)
-
 // Markdown renderer for streaming text
 var mdRenderer = md.New()
-
-// InfoStyle for rendering the end-of-turn info line
-var InfoStyle = lipgloss.NewStyle().Faint(true)
 
 func main() {
 	if err := run(); err != nil {
@@ -220,106 +214,8 @@ func run() error {
 	stream := agent.Run(ctx, message)
 	defer stream.Close()
 
-	// Decoupled rendering: receive events fast, render gradually
-	type outputChunk struct {
-		kind      string
-		content   string
-		toolName  string
-		toolInput string
-		toolError bool
-	}
-	renderCh := make(chan outputChunk, 100)
-
-	isWordBoundary := func(r rune) bool {
-		return r == ' ' || r == '\n' || r == '\t' || r == '.' || r == ',' || r == '!' || r == '?' || r == ';' || r == ':'
-	}
-
-	// Render goroutine
-	go func() {
-		var textBuffer, thinkingBuffer strings.Builder
-		const flushThreshold = 10
-		var prevKind string // track previous chunk kind for section switches
-
-		flushText := func(instant bool) {
-			if textBuffer.Len() > 0 {
-				fmt.Print(mdRenderer.Write(textBuffer.String()))
-				textBuffer.Reset()
-			}
-			if !instant {
-				time.Sleep(20 * time.Millisecond)
-			}
-		}
-
-		flushThinking := func(instant bool) {
-			if thinkingBuffer.Len() > 0 {
-				fmt.Print(ThoughtStyle.Render(thinkingBuffer.String()))
-				thinkingBuffer.Reset()
-			}
-			if !instant {
-				time.Sleep(20 * time.Millisecond)
-			}
-		}
-
-		// Instant flush both buffers (for section switches)
-		flushBothInstant := func() {
-			flushText(true)
-			flushThinking(true)
-		}
-
-		for chunk := range renderCh {
-			instant := len(renderCh) > flushThreshold
-
-			// Check for section switch (text <-> thinking transition)
-			if prevKind != "" && prevKind != chunk.kind {
-				// Switching sections - instant flush before continuing
-				flushBothInstant()
-			}
-			prevKind = chunk.kind
-
-			switch chunk.kind {
-			case "text":
-				for _, r := range chunk.content {
-					textBuffer.WriteRune(r)
-					if isWordBoundary(r) {
-						flushText(instant)
-					}
-				}
-
-			case "thinking":
-				for _, r := range chunk.content {
-					thinkingBuffer.WriteRune(r)
-					if isWordBoundary(r) {
-						flushThinking(instant)
-					}
-				}
-
-			case "tool_start":
-				flushBothInstant()
-
-			case "tool_result":
-				flushBothInstant()
-				fmt.Fprintf(os.Stderr, "\n")
-				if chunk.toolError {
-					render.RenderToolError(chunk.toolName, chunk.toolInput, chunk.content, chunk.content)
-				} else {
-					render.RenderToolCall(chunk.toolName, chunk.toolInput, chunk.content, formatResultSummary(chunk.toolName, chunk.content))
-				}
-
-			case "flush":
-				// Final flush - instant
-				flushBothInstant()
-				if remaining := mdRenderer.Flush(); remaining != "" {
-					fmt.Print(remaining)
-				}
-			}
-		}
-
-		// Final flush - instant (true)
-		flushBothInstant()
-		if remaining := mdRenderer.Flush(); remaining != "" {
-			fmt.Print(remaining)
-		}
-	}()
+	// Output handler for streaming markdown
+	handler := uistream.New(mdRenderer)
 
 	var toolCallName, toolCallInput string
 
@@ -345,9 +241,9 @@ func run() error {
 		case <-ctx.Done():
 			// Context cancelled - user hit Ctrl-c or Ctrl-\
 			stream.Close()
-			close(renderCh)
 			streamWg.Wait()
 			bufio.NewWriter(os.Stdout).Flush()
+			fmt.Print(handler.FinalFlush())
 
 			// Check if this was graceful shutdown (Ctrl-\)
 			if shutdownReason == "Ctrl-\\" {
@@ -359,7 +255,7 @@ func run() error {
 					totalTokens := estimateTokens(messages)
 					contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
 					fmt.Fprintf(os.Stderr, "\n%s\n",
-						InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs (saved)",
+						uistream.InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs (saved)",
 							defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 					return nil
 				}
@@ -368,7 +264,7 @@ func run() error {
 			if shutdownReason == "" {
 				shutdownReason = "interrupted"
 			}
-			fmt.Fprintf(os.Stderr, "\n%s\n", InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), shutdownReason)))
+			fmt.Fprintf(os.Stderr, "\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), shutdownReason)))
 			return nil
 
 		case evt, ok := <-eventCh:
@@ -378,28 +274,35 @@ func run() error {
 			}
 			switch evt.Type {
 			case takeTurn.EventTypeText:
-				renderCh <- outputChunk{kind: "text", content: evt.Text}
+				fmt.Print(handler.Handle("text", evt.Text))
 
 			case takeTurn.EventTypeThinking:
-				renderCh <- outputChunk{kind: "thinking", content: evt.Thinking}
+				fmt.Print(handler.Handle("thinking", evt.Thinking))
 
 			case takeTurn.EventTypeToolCall:
 				toolCallName = evt.ToolCall.ToolUseName
 				toolCallInput = string(evt.ToolCall.ToolUseInput)
-				renderCh <- outputChunk{kind: "tool_start", toolName: toolCallName, toolInput: toolCallInput}
+				handler.SwitchSection()
 
 			case takeTurn.EventTypeToolResult:
-				renderCh <- outputChunk{kind: "tool_result", toolName: toolCallName, toolInput: toolCallInput, content: evt.ToolResult.ToolResultContent, toolError: evt.ToolResult.ToolResultError}
+				handler.SwitchSection()
+				fmt.Fprintf(os.Stderr, "\n")
+				if evt.ToolResult.ToolResultError {
+					render.RenderToolError(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, evt.ToolResult.ToolResultContent)
+				} else {
+					render.RenderToolCall(toolCallName, toolCallInput, evt.ToolResult.ToolResultContent, formatResultSummary(toolCallName, evt.ToolResult.ToolResultContent))
+				}
 
 			case takeTurn.EventTypeDone:
-				renderCh <- outputChunk{kind: "flush"}
-				close(renderCh)
+				fmt.Print(handler.Handle("flush", ""))
 			}
 		}
 	}
 
 	streamWg.Wait()
-	<-renderCh
+	bufio.NewWriter(os.Stdout).Flush()
+	output := handler.FinalFlush()
+	fmt.Print(output)
 
 	// Check error after loop - handle signal-based cancellation
 	if streamErr != nil {
@@ -410,7 +313,7 @@ func run() error {
 			if msg == "" {
 				msg = "interrupted"
 			}
-			fmt.Fprintf(os.Stderr, "\n%s\n", InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), msg)))
+			fmt.Fprintf(os.Stderr, "\n%s\n", uistream.InfoStyle.Render(fmt.Sprintf("Session %s %s", sessionID(sessionPath), msg)))
 			return nil
 		}
 		return fmt.Errorf("agent: %w", streamErr)
@@ -425,7 +328,7 @@ func run() error {
 	// Ensure stdout is fully flushed before printing conclusion line
 	bufio.NewWriter(os.Stdout).Flush()
 	fmt.Fprintf(os.Stderr, "\n%s\n",
-		InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
+		uistream.InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
 			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
 
 	// Persist new messages

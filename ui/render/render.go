@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
+	"github.com/nalanj/please/util/terminal"
 )
 
 // Styling
@@ -27,16 +27,7 @@ var (
 
 // TerminalWidth returns the terminal width, defaulting to 80.
 func TerminalWidth() int {
-	width, _, err := term.GetSize(0)
-	if err != nil || width <= 0 {
-		if cols := os.Getenv("COLUMNS"); cols != "" {
-			if w, err := strconv.Atoi(cols); err == nil && w > 0 {
-				return w
-			}
-		}
-		return 80
-	}
-	return width
+	return terminal.Width()
 }
 
 // FormatToolInput creates a human-readable summary of tool input.
