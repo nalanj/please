@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 	"github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
-	"github.com/google/uuid"
 
 	"github.com/nalanj/please/ops/agent/takeTurn"
 	"github.com/nalanj/please/util/llm"
@@ -137,6 +137,33 @@ func run() error {
 	existing, err := loadSession(sessionPath)
 	if err != nil {
 		return fmt.Errorf("loading session: %w", err)
+	}
+
+	// If one-off mode, create a new session file to avoid writing to the prior session.
+	// We still keep the prior session's messages for context, but save new work elsewhere.
+	if oneOff && len(existing) > 0 {
+		newSessionID := uuid.New().String()[:8]
+		newSessionFilename := fmt.Sprintf("%s.jsonl", newSessionID)
+		newSessionPath := filepath.Join(dotPleaseDir, sessionsDir, newSessionFilename)
+
+		// Create new session file and write prior messages to it
+		f, err := os.Create(newSessionPath)
+		if err != nil {
+			return fmt.Errorf("creating one-off session: %w", err)
+		}
+		enc := json.NewEncoder(f)
+		for _, msg := range existing {
+			if err := enc.Encode(msg); err != nil {
+				f.Close()
+				return fmt.Errorf("writing one-off session: %w", err)
+			}
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("closing one-off session: %w", err)
+		}
+
+		sessionPath = newSessionPath
+
 	}
 
 	// Build agent
