@@ -2,6 +2,8 @@
 package md
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -34,10 +36,12 @@ var (
 
 // Renderer handles streaming markdown rendering.
 type Renderer struct {
-	mu          sync.Mutex
-	buffer      strings.Builder
-	inCodeBlock bool
-	prevWS      bool // previous was whitespace, for collapsing
+	mu              sync.Mutex
+	buffer          strings.Builder
+	inCodeBlock     bool
+	prevWS          bool // previous was whitespace, for collapsing
+	lastListPrefix  string
+	lastListType    string // "ordered" or "unordered"
 }
 
 // New creates a new streaming markdown renderer.
@@ -49,6 +53,11 @@ func New() *Renderer {
 func (r *Renderer) Write(text string) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Check for inconsistent list indentation
+	if warning := r.checkListIndentation(text); warning != "" {
+		fmt.Fprintf(os.Stderr, "DEBUG: %s\n", warning)
+	}
 
 	r.buffer.WriteString(text)
 
@@ -97,6 +106,49 @@ func (r *Renderer) Reset() {
 	r.buffer.Reset()
 	r.inCodeBlock = false
 	r.prevWS = false
+	r.lastListPrefix = ""
+	r.lastListType = ""
+}
+
+// checkListIndentation checks for inconsistent list indentation in text.
+// Returns a warning message if inconsistency is detected, empty string otherwise.
+// Also updates the lastListPrefix and lastListType fields.
+func (r *Renderer) checkListIndentation(text string) string {
+	trimmed := strings.TrimLeft(text, " \t")
+	prefixLen := len(text) - len(trimmed)
+	currentPrefix := strings.Repeat(" ", prefixLen)
+
+	var listType string
+	var isListItem bool
+
+	if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+		listType = "unordered"
+		isListItem = true
+	} else if isOrderedList(trimmed) {
+		listType = "ordered"
+		isListItem = true
+	}
+
+	if !isListItem {
+		return ""
+	}
+
+	var warning string
+
+	// Check for type change or indentation change
+	if r.lastListType != "" && r.lastListType != listType {
+		warning = fmt.Sprintf("List type changed from %s to %s", r.lastListType, listType)
+	} else if r.lastListType != "" && currentPrefix != r.lastListPrefix {
+		// We've seen a list item before, and this one has different indentation
+		warning = fmt.Sprintf("List indentation mismatch: prev=%q, curr=%q",
+			r.lastListPrefix, currentPrefix)
+	}
+
+	// Update tracking fields
+	r.lastListPrefix = currentPrefix
+	r.lastListType = listType
+
+	return warning
 }
 
 // hasPendingMarker checks if there's an incomplete markdown marker in text.
