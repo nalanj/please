@@ -60,16 +60,16 @@ func run() error {
 	oneOff := false
 	args := os.Args[1:]
 	for _, arg := range args {
-		if arg == "--new" {
+		if arg == "--new" || arg == "-n" {
 			newSession = true
-		} else if arg == "--one-off" {
+		} else if arg == "--one-off" || arg == "-1" {
 			oneOff = true
 		}
 	}
 	// Remove flags from args
 	var filtered []string
 	for _, arg := range args {
-		if arg != "--new" && arg != "--one-off" {
+		if arg != "--new" && arg != "-n" && arg != "--one-off" && arg != "-1" {
 			filtered = append(filtered, arg)
 		}
 	}
@@ -77,19 +77,23 @@ func run() error {
 
 	// Check for conflicting flags
 	if newSession && oneOff {
-		return fmt.Errorf("--new and --one-off cannot be used together")
+		return fmt.Errorf("-n/--new and -1/--one-off cannot be used together")
 	}
 
 	// Handle --help flag
-	if len(args) >= 1 && args[0] == "--help" {
+	if len(args) >= 1 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Println("Usage: please [options] <message>")
-		fmt.Println("       please --help")
+		fmt.Println("       please -h")
+		fmt.Println("       please -n <message>")
 		fmt.Println("       please --new <message>")
+		fmt.Println("       please -1 <message>")
 		fmt.Println("       please --one-off <message>")
 		fmt.Println()
 		fmt.Println("Options:")
-		fmt.Println("  --new       Start a new session instead of continuing the current one.")
-		fmt.Println("  --one-off   Take a turn without updating the current session symlink.")
+		fmt.Println("  -n, --new       Start a new session instead of continuing the current one.")
+		fmt.Println("  -1, --one-off   Take a turn without updating the current session symlink.")
+		fmt.Println()
+		fmt.Println("  -h, --help      Show this help message.")
 		fmt.Println()
 		fmt.Println("A turn-based agent CLI. Provide a message to continue the current")
 		fmt.Println("session or start a new one.")
@@ -98,7 +102,16 @@ func run() error {
 
 	// Message from args
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "usage: please <message>\n")
+		fmt.Fprintf(os.Stderr, "Usage: please [options] <message>\n")
+		fmt.Fprintf(os.Stderr, "       please -h\n")
+		fmt.Fprintf(os.Stderr, "       please -n <message>\n")
+		fmt.Fprintf(os.Stderr, "       please -1 <message>\n")
+		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fmt.Fprintf(os.Stderr, "  -n, --new       Start a new session instead of continuing the current one.\n")
+		fmt.Fprintf(os.Stderr, "  -1, --one-off   Take a turn without updating the current session symlink.\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help      Show this help message.\n")
+		fmt.Fprintf(os.Stderr, "\n")
 		return fmt.Errorf("no message provided")
 	}
 	message := strings.Join(args, " ")
