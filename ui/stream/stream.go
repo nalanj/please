@@ -66,10 +66,10 @@ func (h *OutputHandler) switchSection() {
 		fmt.Print(h.md.Write(h.textBuf.String()))
 		h.textBuf.Reset()
 	}
-	// Flush thinking buffer
+	// Flush thinking buffer - wrap entire content with style
 	if h.thinkBuf.Len() > 0 {
 		mdRendered := h.md.Write(h.thinkBuf.String())
-		fmt.Print(ThoughtStyle.Render(mdRendered))
+		fmt.Print(ThoughtStyleANSI + mdRendered + ThoughtStyleANSIRest)
 		h.thinkBuf.Reset()
 	}
 	// Reset md renderer state for new context
@@ -91,10 +91,10 @@ func (h *OutputHandler) finalFlush(instant bool) string {
 		h.textBuf.Reset()
 	}
 
-	// Flush thinking buffer
+	// Flush thinking buffer - wrap entire content with style
 	if h.thinkBuf.Len() > 0 {
 		mdRendered := h.md.Write(h.thinkBuf.String())
-		sb.WriteString(ThoughtStyle.Render(mdRendered))
+		sb.WriteString(ThoughtStyleANSI + mdRendered + ThoughtStyleANSIRest)
 		h.thinkBuf.Reset()
 	}
 
@@ -127,18 +127,44 @@ func (h *OutputHandler) processText(content string, instant bool) string {
 }
 
 // processThinking handles thinking content with word-boundary flushing.
-// Content is rendered through markdown first, then styled with ThoughtStyle.
+// Content is rendered through markdown first, then wrapped with thinking ANSI codes.
+// Only chunks that are not just whitespace AND have actual markdown content get styled.
 func (h *OutputHandler) processThinking(content string, instant bool) string {
 	var result strings.Builder
 
 	for _, r := range content {
 		h.thinkBuf.WriteRune(r)
 		if isWordBoundary(r) {
-			mdRendered := h.md.Write(h.thinkBuf.String())
-			result.WriteString(ThoughtStyle.Render(mdRendered))
+			// Get the buffer content
+			bufStr := h.thinkBuf.String()
+			
+			// Render through markdown
+			mdRendered := h.md.Write(bufStr)
+			
+			// Only apply style if:
+			// 1. Content is not just whitespace
+			// 2. Markdown actually rendered something (not pending)
+			if isNonWhitespace(bufStr) && mdRendered != "" {
+				result.WriteString(ThoughtStyleANSI + mdRendered + ThoughtStyleANSIRest)
+			} else if mdRendered != "" {
+				// Whitespace content - output without style
+				result.WriteString(mdRendered)
+			}
+			// If mdRendered is empty (pending), don't output anything - content stays in buffer
+			
 			h.thinkBuf.Reset()
 		}
 	}
 
 	return result.String()
+}
+
+// isNonWhitespace returns true if s contains any non-whitespace character.
+func isNonWhitespace(s string) bool {
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			return true
+		}
+	}
+	return false
 }

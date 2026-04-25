@@ -212,7 +212,6 @@ func hasPendingMarker(text string) bool {
 	return false
 }
 
-
 // isInsideCodeBlock checks if we're inside an open code block.
 func isInsideCodeBlock(text string) bool {
 	return strings.Count(text, "```")%2 != 0
@@ -243,7 +242,6 @@ func isOrderedList(text string) bool {
 	return strings.HasPrefix(afterDigits, ". ")
 }
 
-
 // isInsideCodeBlockAt checks if position in original text is inside a code block.
 func isInsideCodeBlockAt(original string, pos int) bool {
 	before := original[:pos]
@@ -254,6 +252,7 @@ func isInsideCodeBlockAt(original string, pos int) bool {
 func processMarkdown(text string) (before, styled, after string) {
 	trimmed := strings.TrimLeft(text, " \t")
 	if trimmed == "" {
+		// Text is all leading whitespace - preserve it for next call
 		return "", "", text
 	}
 	prefixLen := len(text) - len(trimmed)
@@ -265,6 +264,10 @@ func processMarkdown(text string) (before, styled, after string) {
 			content := trimmed[3 : 3+codeBlockEnd]
 			styled = renderCodeBlock(content)
 			remaining := trimmed[3+codeBlockEnd+3:]
+			// Preserve leading whitespace in after
+			if prefixLen > 0 {
+				remaining = strings.Repeat(" ", prefixLen) + remaining
+			}
 			return "", styled, remaining
 		}
 	}
@@ -291,7 +294,12 @@ func processMarkdown(text string) (before, styled, after string) {
 				headerText = text[:prefixLen] + headerText
 			}
 			styled = ansiHeader + ansiBold + headerText + ansiReset
-			return "", styled, text[end+prefixLen+1:]
+			// Preserve leading whitespace in after
+			afterContent := text[end+prefixLen+1:]
+			if prefixLen > 0 && len(afterContent) > 0 {
+				afterContent = strings.Repeat(" ", prefixLen) + afterContent
+			}
+			return "", styled, afterContent
 		}
 	}
 
@@ -309,7 +317,12 @@ func processMarkdown(text string) (before, styled, after string) {
 			if endIdx >= 0 {
 				boldText := rest[:endIdx]
 				styled = ansiBold + boldText + ansiReset
-				return text[:actualPos], styled, rest[endIdx+2:]
+				afterContent := rest[endIdx+2:]
+				// Preserve leading whitespace in after
+				if prefixLen > 0 && len(afterContent) > 0 && strings.TrimLeft(afterContent, " \t") == "" {
+					afterContent = text[actualPos:] // Keep original
+				}
+				return text[:actualPos], styled, afterContent
 			}
 			idx = actualPos + 2
 		}
@@ -339,6 +352,53 @@ func processMarkdown(text string) (before, styled, after string) {
 				return "", "", text
 			}
 		}
+	}
+
+	// List items (- or * at start of line) - check BEFORE italic
+	// because italic can appear inside list items
+	if !isInsideCodeBlock(text) && (strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")) {
+		end := strings.Index(trimmed, "\n")
+		if end < 0 {
+			return "", "", text
+		}
+		listText := trimmed[:end]
+		if prefixLen > 0 {
+			listText = text[:prefixLen] + listText
+		}
+		styled = ansiList + listText + "\n" + ansiReset
+		afterStart := end + prefixLen + 1
+		if afterStart < len(text) {
+			// Preserve leading whitespace in after
+			afterContent := text[afterStart:]
+			if prefixLen > 0 && len(afterContent) > 0 && strings.TrimLeft(afterContent, " \t") == "" {
+				afterContent = text[end+prefixLen+1:] // Keep original
+			}
+			return "", styled, afterContent
+		}
+		return "", styled, ""
+	}
+
+	// Ordered list items (1. 2. 10. etc.) - check BEFORE italic
+	if !isInsideCodeBlock(text) && isOrderedList(trimmed) {
+		end := strings.Index(trimmed, "\n")
+		if end < 0 {
+			return "", "", text
+		}
+		listText := trimmed[:end]
+		if prefixLen > 0 {
+			listText = text[:prefixLen] + listText
+		}
+		styled = ansiList + listText + "\n" + ansiReset
+		afterStart := end + prefixLen + 1
+		if afterStart < len(text) {
+			// Preserve leading whitespace in after
+			afterContent := text[afterStart:]
+			if prefixLen > 0 && len(afterContent) > 0 && strings.TrimLeft(afterContent, " \t") == "" {
+				afterContent = text[end+prefixLen+1:]
+			}
+			return "", styled, afterContent
+		}
+		return "", styled, ""
 	}
 
 	// Italic *text* (but not **)
@@ -371,42 +431,6 @@ func processMarkdown(text string) (before, styled, after string) {
 			}
 		}
 	}
-
-	// List items (- or * at start of line)
-	if !isInsideCodeBlock(text) && (strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")) {
-		end := strings.Index(trimmed, "\n")
-		if end < 0 {
-			return "", "", text
-		}
-		listText := trimmed[:end]
-		if prefixLen > 0 {
-			listText = text[:prefixLen] + listText
-		}
-		styled = ansiList + listText + "\n" + ansiReset
-		afterStart := end + prefixLen + 1
-		if afterStart < len(text) {
-			return "", styled, text[afterStart:]
-		}
-		return "", styled, ""
-	}
-	// Ordered list items (1. 2. 10. etc.)
-	if !isInsideCodeBlock(text) && isOrderedList(trimmed) {
-		end := strings.Index(trimmed, "\n")
-		if end < 0 {
-			return "", "", text
-		}
-		listText := trimmed[:end]
-		if prefixLen > 0 {
-			listText = text[:prefixLen] + listText
-		}
-		styled = ansiList + listText + "\n" + ansiReset
-		afterStart := end + prefixLen + 1
-		if afterStart < len(text) {
-			return "", styled, text[afterStart:]
-		}
-		return "", styled, ""
-	}
-
 
 	return "", "", text
 }

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	md "github.com/nalanj/please/ui/markdown"
 	"github.com/nalanj/please/ui/render"
+	"github.com/nalanj/please/ui/stream"
 	"github.com/nalanj/please/util/tools"
 )
 
@@ -89,6 +91,10 @@ func main() {
 		// Fast streaming demo
 		streamMarkdown(false)
 
+	case "thinking", "thinking-fast":
+		// Thinking streaming demo
+		streamThinking()
+
 	default:
 		printUsage()
 		os.Exit(1)
@@ -136,6 +142,51 @@ func streamMarkdown(slow bool) {
 	}
 }
 
+// streamThinking simulates streaming thinking output with markdown.
+func streamThinking() {
+	h := stream.New(md.New())
+
+	// Thinking content with markdown elements
+	thinkingContent := `Let me think about this...
+
+## Analysis
+
+I need to consider:
+- **First point**: This is important
+- *Second point*: Also matters
+
+### Code Example
+
+Here is some example code:
+
+` + "```" + `python
+def hello():
+    print("world")
+` + "```" + `
+
+Let me wrap up my thinking.`
+
+	// Stream the thinking content character by character with small delays
+	// Using OutputHandler to properly handle thinking style
+	for _, char := range thinkingContent {
+		result := h.Handle("thinking", string(char))
+		if result != "" {
+			fmt.Print(result)
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+
+	// Final flush
+	if final := h.FinalFlush(); final != "" {
+		fmt.Print(final)
+	}
+
+	// Show a newline after thinking
+	fmt.Println()
+	fmt.Println()
+	fmt.Print(lipgloss.NewStyle().Faint(true).Render("→ End of thinking"))
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: ui <sample>")
 	fmt.Fprintln(os.Stderr, "Samples:")
@@ -147,4 +198,6 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  markdown         - streaming markdown demo")
 	fmt.Fprintln(os.Stderr, "  markdown-stream  - alias for markdown")
 	fmt.Fprintln(os.Stderr, "  markdown-fast    - fast streaming without delays")
+	fmt.Fprintln(os.Stderr, "  thinking         - streaming thinking with markdown (slow)")
+	fmt.Fprintln(os.Stderr, "  thinking-fast    - fast thinking demo")
 }
