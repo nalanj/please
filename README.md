@@ -15,8 +15,30 @@ please "Update the readme to describe all of the features"
 
 ### System Prompt
 
-Create a `SYSTEM.md` file in the project root to customize the agent's behavior.
+System prompt files are looked up in the repo root (if in a git repository)
+or the current working directory (if not in a git repo).
+
+#### SYSTEM.md
+
+Create a `SYSTEM.md` file in the repo root to customize the agent's behavior.
 The contents of this file are sent as the system prompt on every request.
+
+If no `SYSTEM.md` exists, a built-in default prompt is used.
+
+#### AGENTS.md
+
+You can also create an `AGENTS.md` file for foundational agent instructions.
+When starting a new session (or continuing an empty session), the contents of
+`AGENTS.md` are sent as the first user message, followed by your actual message:
+
+```
+User: <AGENTS.md content>
+
+User: <your message>
+```
+
+This allows AGENTS.md to function as persistent foundational instructions
+that are injected at the start of each new conversation context.
 
 ## Providers
 

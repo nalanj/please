@@ -29,6 +29,7 @@ import (
 const (
 	defaultModel        = "minimax-m2.7"
 	systemFile          = "SYSTEM.md"
+	agentsFile          = "AGENTS.md"
 	dotPleaseDir        = ".please"
 	sessionsDir         = "sessions"
 	currentSessionSym   = "current-session"
@@ -45,6 +46,58 @@ func main() {
 	}
 }
 
+// repoRoot returns the root of the git repository if we're in one,
+// otherwise the current working directory.
+func repoRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	// Walk up the directory tree looking for .git
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root
+			break
+		}
+		dir = parent
+	}
+
+	return cwd
+}
+
+// buildSystemPrompt reads the system prompt from SYSTEM.md.
+// Looks in repo root (if in git repo) or current directory.
+// Returns built-in default if SYSTEM.md doesn't exist.
+func buildSystemPrompt() string {
+	root := repoRoot()
+
+	// Read optional SYSTEM.md file
+	systemPath := filepath.Join(root, systemFile)
+	if data, err := os.ReadFile(systemPath); err == nil {
+		return string(data)
+	}
+
+	return "You are a helpful assistant."
+}
+
+// loadAgentsPrompt returns the contents of AGENTS.md if it exists.
+// Looks in repo root (if in git repo) or current directory.
+func loadAgentsPrompt() string {
+	root := repoRoot()
+	agentsPath := filepath.Join(root, agentsFile)
+	if data, err := os.ReadFile(agentsPath); err == nil {
+		return string(data)
+	}
+	return ""
+}
+
 func run() error {
 	// Ensure .please directory and sessions exist
 	if err := os.MkdirAll(filepath.Join(dotPleaseDir, sessionsDir), 0o755); err != nil {
@@ -56,9 +109,10 @@ func run() error {
 	oneOff := false
 	args := os.Args[1:]
 	for _, arg := range args {
-		if arg == "--new" || arg == "-n" {
+		switch arg {
+		case "--new", "-n":
 			newSession = true
-		} else if arg == "--one-off" || arg == "-1" {
+		case "--one-off", "-1":
 			oneOff = true
 		}
 	}
@@ -136,11 +190,8 @@ func run() error {
 	}
 	provider := anthropic.NewMiniMaxProvider(apiKey)
 
-	// Read optional system prompt
-	var system string
-	if data, err := os.ReadFile(systemFile); err == nil {
-		system = string(data)
-	}
+	// Read system prompt from files
+	system := buildSystemPrompt()
 
 	// Load existing session messages
 	existing, err := loadSession(sessionPath)
@@ -163,7 +214,8 @@ func run() error {
 		enc := json.NewEncoder(f)
 		for _, msg := range existing {
 			if err := enc.Encode(msg); err != nil {
-				f.Close()
+			_ = f.Close()
+
 				return fmt.Errorf("writing one-off session: %w", err)
 			}
 		}
@@ -182,11 +234,21 @@ func run() error {
 	if system != "" {
 		opts = append(opts, takeTurn.WithSystem(system))
 	}
+
+	// Prepend AGENTS.md as a distinct first user message for new/empty sessions
+	var prevCount int
+	if agentsContent := loadAgentsPrompt(); agentsContent != "" && (newSession || len(existing) == 0) {
+		opts = append(opts, takeTurn.WithMessages(llm.TextMessage(llm.RoleUser, agentsContent)))
+		prevCount = 1 // AGENTS.md message will be in history before user message
+	} else {
+		prevCount = len(existing)
+	}
+
 	if len(existing) > 0 {
 		opts = append(opts, takeTurn.WithMessages(existing...))
 	}
+
 	agent := takeTurn.New(provider, defaultModel, opts...)
-	prevCount := len(existing)
 
 	startTime := time.Now()
 
@@ -244,7 +306,7 @@ func run() error {
 			// Context cancelled - user hit Ctrl-c or Ctrl-\
 			stream.Close()
 			streamWg.Wait()
-			bufio.NewWriter(os.Stdout).Flush()
+			_ = bufio.NewWriter(os.Stdout).Flush()
 			fmt.Print(handler.FinalFlush())
 
 			// Check if this was graceful shutdown (Ctrl-\)
@@ -302,7 +364,7 @@ func run() error {
 	}
 
 	streamWg.Wait()
-	bufio.NewWriter(os.Stdout).Flush()
+	_ = bufio.NewWriter(os.Stdout).Flush()
 	output := handler.FinalFlush()
 	fmt.Print(output)
 
@@ -310,7 +372,7 @@ func run() error {
 	if streamErr != nil {
 		// Check if context was cancelled (Ctrl-c/Ctrl-\)
 		if ctx.Err() != nil || shutdownReason != "" {
-			bufio.NewWriter(os.Stdout).Flush()
+			_ = bufio.NewWriter(os.Stdout).Flush()
 			msg := shutdownReason
 			if msg == "" {
 				msg = "interrupted"
@@ -328,7 +390,7 @@ func run() error {
 	contextPct := float64(totalTokens) / float64(defaultContextLimit) * 100
 
 	// Ensure stdout is fully flushed before printing conclusion line
-	bufio.NewWriter(os.Stdout).Flush()
+	_ = bufio.NewWriter(os.Stdout).Flush()
 	fmt.Fprintf(os.Stderr, "\n\n%s\n",
 		uistream.InfoStyle.Render(fmt.Sprintf("%s via %s • %s • %.1f%% • %.1fs",
 			defaultModel, providerName(), sessionID(sessionPath), contextPct, duration.Seconds())))
@@ -446,10 +508,10 @@ func loadSession(path string) ([]llm.Message, error) {
 				content = append(content, llm.ContentBlock{Type: llm.ContentTypeThinking, Thinking: evt.Chunk})
 			case "tool_call":
 				content = append(content, llm.ContentBlock{
-					Type:           llm.ContentTypeToolUse,
-					ToolUseID:       evt.ID,
-					ToolUseName:     evt.Name,
-					ToolUseInput:    json.RawMessage(evt.Input),
+					Type:        llm.ContentTypeToolUse,
+					ToolUseID:   evt.ID,
+					ToolUseName: evt.Name,
+					ToolUseInput: json.RawMessage(evt.Input),
 				})
 			case "tool_result":
 				content = append(content, llm.ContentBlock{
