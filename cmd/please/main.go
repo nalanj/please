@@ -24,6 +24,9 @@ import (
 	"github.com/nalanj/please/util/llm"
 	"github.com/nalanj/please/util/llm/anthropic"
 	"github.com/nalanj/please/util/tools"
+
+
+	"github.com/nalanj/please/cmd/completion"
 )
 
 const (
@@ -108,6 +111,22 @@ func run() error {
 	newSession := false
 	oneOff := false
 	args := os.Args[1:]
+
+	// Handle --completion flag
+	for i, arg := range args {
+		if arg == "--completion" || arg == "-c" {
+			shell := ""
+			if i+1 < len(args) {
+				shell = args[i+1]
+			}
+			if err := completion.Generate(os.Stdout, shell); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+	}
+
 	for _, arg := range args {
 		switch arg {
 		case "--new", "-n":
@@ -144,6 +163,8 @@ func run() error {
 		fmt.Println("  -1, --one-off   Take a turn without updating the current session symlink.")
 		fmt.Println()
 		fmt.Println("  -h, --help      Show this help message.")
+		fmt.Println("  -c, --completion Generate shell completion script for the specified shell.")
+		fmt.Println("                   Supported shells: bash, zsh, fish, powershell")
 		fmt.Println()
 		fmt.Println("A turn-based agent CLI. Provide a message to continue the current")
 		fmt.Println("session or start a new one.")
@@ -161,6 +182,9 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  -n, --new       Start a new session instead of continuing the current one.\n")
 		fmt.Fprintf(os.Stderr, "  -1, --one-off   Take a turn without updating the current session symlink.\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help      Show this help message.\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help      Show this help message.\n")
+		fmt.Fprintf(os.Stderr, "  -c, --completion Generate shell completion script for the specified shell.\n")
+		fmt.Fprintf(os.Stderr, "                   Supported shells: bash, zsh, fish, powershell\n")
 		fmt.Fprintf(os.Stderr, "\n")
 		return fmt.Errorf("no message provided")
 	}

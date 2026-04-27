@@ -12,6 +12,29 @@ please "Update the readme to describe all of the features"
 ### Options
 
 - `--new` - Start a new session instead of continuing the current one.
+- `--one-off` - Take a turn without updating the current session symlink.
+- `-c, --completion <shell>` - Generate shell completion script.
+
+### Shell Completions
+
+Generate a completion script for your shell:
+
+```bash
+# Bash
+please --completion bash >> ~/.bashrc
+
+# Zsh
+please --completion zsh >> ~/.zshrc
+
+# Fish
+please --completion fish > ~/.config/fish/completions/please.fish
+```
+
+Supported shells: `bash`, `zsh`, `fish`, `powershell`.
+
+After sourcing the completion script, you'll get tab completion for flags
+(`-n`, `--new`, `-1`, `--one-off`, `-h`, `--help`, `--completion`) when
+typing `please`.
 
 ### System Prompt
 
