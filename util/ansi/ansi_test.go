@@ -79,12 +79,12 @@ func TestSupportsColorNO_COLOR(t *testing.T) {
 	// Save original env
 	origTerm := os.Getenv("TERM")
 	defer func() {
-		os.Setenv("TERM", origTerm)
-		os.Unsetenv("NO_COLOR")
+		_ = os.Setenv("TERM", origTerm)
+		_ = os.Unsetenv("NO_COLOR")
 	}()
 
-	os.Setenv("TERM", "xterm-256color")
-	os.Setenv("NO_COLOR", "1")
+	_ = os.Setenv("TERM", "xterm-256color")
+	_ = os.Setenv("NO_COLOR", "1")
 	colorEnabled = supportsColor()
 	if colorEnabled {
 		t.Error("supportsColor() should return false with NO_COLOR=1")
@@ -95,10 +95,10 @@ func TestSupportsColorDumb(t *testing.T) {
 	// Save original env
 	origTerm := os.Getenv("TERM")
 	defer func() {
-		os.Setenv("TERM", origTerm)
+		_ = os.Setenv("TERM", origTerm)
 	}()
 
-	os.Setenv("TERM", "dumb")
+	_ = os.Setenv("TERM", "dumb")
 	colorEnabled = supportsColor()
 	if colorEnabled {
 		t.Error("supportsColor() should return false with TERM=dumb")

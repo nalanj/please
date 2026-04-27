@@ -33,11 +33,11 @@ func run(args []string, w io.Writer) error {
 			case "instant":
 				opts.Instant = true
 			case "scale":
-				fmt.Sscanf(parts[1], "%f", &opts.Scale)
+				_, _ = fmt.Sscanf(parts[1], "%f", &opts.Scale)
 			case "filter":
 				opts.Filter = parts[1]
 			case "from-turn":
-				fmt.Sscanf(parts[1], "%d", &opts.FromTurn)
+				_, _ = fmt.Sscanf(parts[1], "%d", &opts.FromTurn)
 			default:
 				return fmt.Errorf("unknown flag: --%s", parts[0])
 			}
@@ -81,7 +81,9 @@ func run(args []string, w io.Writer) error {
 			}
 			
 			// Output the event
-			fmt.Fprintf(w, "%#v\n", evt)
+			if _, err := fmt.Fprintf(w, "%#v\n", evt); err != nil {
+				return err
+			}
 		}
 	}
 

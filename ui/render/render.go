@@ -79,12 +79,12 @@ func RenderToolCall(name, input, output, result string) {
 	width := TerminalWidth()
 
 	// Blank line above (default background)
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Styled block
 	// Margin above
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Title with formatted input (write_file shows details below)
 	title := " " + name
@@ -98,8 +98,8 @@ func RenderToolCall(name, input, output, result string) {
 	RenderLine(title, width)
 
 	// Blank line between title and output
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Output lines
 	switch name {
@@ -119,11 +119,11 @@ func RenderToolCall(name, input, output, result string) {
 	RenderResultLine(" "+result+" ", width)
 
 	// Margin below
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Blank line below (default background)
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte("\n"))
 }
 
 // RenderToolError renders a tool error block:
@@ -131,12 +131,12 @@ func RenderToolError(name, input, output, errMsg string) {
 	width := TerminalWidth()
 
 	// Blank line above (default background)
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Styled block
 	// Margin above
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Title with formatted input
 	title := " " + name
@@ -150,8 +150,8 @@ func RenderToolError(name, input, output, errMsg string) {
 	RenderLine(title, width)
 
 	// Blank line between title and output
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line != "" {
@@ -162,11 +162,11 @@ func RenderToolError(name, input, output, errMsg string) {
 	RenderErrorLine(" "+errMsg+" ", width)
 
 	// Margin below
-	os.Stderr.Write([]byte(makeBgLine("", width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine("", width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 
 	// Blank line below (default background)
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte("\n"))
 }
 
 // makeBgLine creates a line with the tool background styling.
@@ -199,8 +199,8 @@ func makeBgLine(text string, width int) string {
 
 // RenderLine renders a line with the tool background and padding.
 func RenderLine(text string, width int) {
-	os.Stderr.Write([]byte(makeBgLine(text, width)))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(makeBgLine(text, width)))
+	_, _ = os.Stderr.Write([]byte("\n"))
 }
 
 // RenderResultLine renders a result line with nested styling.
@@ -211,7 +211,7 @@ func RenderResultLine(text string, width int) {
 	}
 
 	if !ansi.IsColorEnabled() {
-		os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
+		_, _ = os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
 		return
 	}
 
@@ -228,8 +228,8 @@ func RenderResultLine(text string, width int) {
 		b.WriteRune(' ')
 	}
 	b.WriteString(ansi.Reset)
-	os.Stderr.Write([]byte(b.String()))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(b.String()))
+	_, _ = os.Stderr.Write([]byte("\n"))
 }
 
 // RenderErrorLine renders an error line with nested styling.
@@ -240,7 +240,7 @@ func RenderErrorLine(text string, width int) {
 	}
 
 	if !ansi.IsColorEnabled() {
-		os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
+		_, _ = os.Stderr.Write([]byte(text + strings.Repeat(" ", padding) + "\n"))
 		return
 	}
 
@@ -257,8 +257,8 @@ func RenderErrorLine(text string, width int) {
 		b.WriteRune(' ')
 	}
 	b.WriteString(ansi.Reset)
-	os.Stderr.Write([]byte(b.String()))
-	os.Stderr.Write([]byte("\n"))
+	_, _ = os.Stderr.Write([]byte(b.String()))
+	_, _ = os.Stderr.Write([]byte("\n"))
 }
 
 // formatReadOutput formats read tool output as a table with line numbers.

@@ -59,7 +59,7 @@ func (r *Reader) Load() ([]Turn, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var turns []Turn
 	scanner := bufio.NewScanner(f)
@@ -226,7 +226,9 @@ func (r *Reader) Replay(opts ReplayOptions, w io.Writer) error {
 		}
 
 		// Output the event
-		fmt.Fprintf(w, "%#v\n", evt)
+		if _, err := fmt.Fprintf(w, "%#v\n", evt); err != nil {
+			return err
+		}
 	}
 
 	return nil

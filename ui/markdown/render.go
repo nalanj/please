@@ -229,12 +229,6 @@ func isOrderedList(text string) bool {
 	return strings.HasPrefix(afterDigits, ". ")
 }
 
-// isInsideCodeBlockAt checks if position in original text is inside a code block.
-func isInsideCodeBlockAt(original string, pos int) bool {
-	before := original[:pos]
-	return strings.Count(before, "```")%2 != 0
-}
-
 // processMarkdown finds and processes complete markdown patterns.
 func processMarkdown(text string) (before, styled, after string) {
 	trimmed := strings.TrimLeft(text, " \t")
